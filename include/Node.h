@@ -20,6 +20,9 @@ private:
 protected:
 	AndersNode(AndersNodeType t, unsigned i, const llvm::Value* v): type(t), idx(i), value(v) {}
 public:
+	unsigned getIndex() const { return idx; }
+	const llvm::Value* getValue() const { return value; }
+
 	friend class AndersNodeFactory;
 };
 

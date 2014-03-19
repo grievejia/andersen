@@ -15,6 +15,7 @@ bool Andersen::runOnModule(Module &M)
 	tli = &getAnalysis<TargetLibraryInfo>();
 
 	identifyObjects(M);
+	nodeFactory.dumpNodeInfo();
 	collectConstraints(M);
 	solveConstraints();
 

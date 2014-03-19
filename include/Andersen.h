@@ -71,9 +71,14 @@ private:
 	/// identified by the program.
 	std::vector<AndersConstraint> constraints;
 
+	// Three main phases
 	void identifyObjects(llvm::Module&);
 	void collectConstraints(llvm::Module&);
 	void solveConstraints();
+
+	// Helper functions for constraint collection
+	void addGlobalInitializerConstraints(AndersObjectNode*, const llvm::Constant*);
+	void addConstraintForConstantPointer(const llvm::Value*);
 public:
 	static char ID;
 

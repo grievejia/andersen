@@ -28,6 +28,13 @@ private:
 	// The set of obj nodes
 	std::vector<AndersObjectNode> objNodes;
 
+	// Some special indices
+	static const unsigned UniversalObjIndex = 0;
+	static const unsigned UniversalPtrIndex = 0;
+	static const unsigned NullPtrIndex = 1;
+	static const unsigned NullObjectIndex = 1;
+	static const unsigned IntPtrIndex = 2;
+
 	// valueNodeMap - This map indicates the AndersValueNode* that a particular Value* corresponds to
 	llvm::DenseMap<const llvm::Value*, AndersValueNode*> valueNodeMap;
 	
@@ -36,7 +43,7 @@ private:
 	llvm::DenseMap<const llvm::Value*, AndersObjectNode*> objNodeMap;
 
 	/// returnMap - This map contains an entry for each function in the
-	/// program that returns a value.
+	/// program that returns a ptr.
 	llvm::DenseMap<const llvm::Function*, AndersValueNode*> returnMap;
 
 	/// varargMap - This map contains the entry used to represent all pointers
@@ -47,8 +54,33 @@ private:
 public:
 	AndersNodeFactory();
 
+	// Factory methods
 	AndersValueNode* createValueNode(const llvm::Value* val = NULL);
 	AndersObjectNode* createObjectNode(const llvm::Value* val = NULL);
+	AndersValueNode* createReturnNode(const llvm::Function* f);
+	AndersValueNode* createVarargNode(const llvm::Function* f);
+
+	// Map lookup interfaces (return NULL if value not found)
+	AndersValueNode* getValueNodeFor(const llvm::Value* val);
+	AndersValueNode* getValueNodeForConstant(const llvm::Constant* c);
+	AndersObjectNode* getObjectNodeFor(const llvm::Value* val);
+	AndersObjectNode* getObjectNodeForConstant(const llvm::Constant* c);
+	AndersValueNode* getReturnNodeFor(const llvm::Function* f);
+	AndersValueNode* getVarargNodeFor(const llvm::Function* f);
+
+	// Special node getters
+	AndersValueNode* getUniversalPtrNode() { return &(valueNodes[UniversalPtrIndex]); }
+	AndersObjectNode* getUniversalObjNode() { return &(objNodes[UniversalObjIndex]); }
+	AndersValueNode* getNullPtrNode() { return &(valueNodes[NullPtrIndex]); }
+	AndersObjectNode* getNullObjectNode() { return &(objNodes[NullObjectIndex]); }
+	AndersValueNode* getIntPtrNode() { return &(valueNodes[IntPtrIndex]); }
+
+	// Size getters
+	unsigned getNumValueNode() const { return valueNodes.size(); }
+	unsigned getNumObjectNode() const { return objNodes.size(); }
+
+	// For debugging purpose
+	void dumpNodeInfo() const;
 };
 
 #endif
