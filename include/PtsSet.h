@@ -2,7 +2,6 @@
 #define ANDERSEN_PTSSET_H
 
 #include "llvm/ADT/SparseBitVector.h"
-#include "llvm/ADT/iterator_range.h"
 
 // We move the points-to set representation here into a separate class
 // The intention is to let us try out different internal implementation of this data-structure (e.g. vectors/bitvecs/sets, ref-counted/non-refcounted) easily

@@ -1,7 +1,7 @@
 #ifndef ANDERSEN_CONSTRAINT_H
 #define ANDERSEN_CONSTRAINT_H
 
-#include "Node.h"
+#include "NodeFactory.h"
 
 #include <cassert>
 
@@ -24,17 +24,18 @@ public:
 	};
 private:
 	ConstraintType type;
-	AndersNode* dest;
-	AndersNode* src;
+	NodeIndex dest;
+	NodeIndex src;
 	unsigned offset;
 public:
-	AndersConstraint(ConstraintType Ty, AndersNode* D, AndersNode* S, unsigned O = 0): type(Ty), dest(D), src(S), offset(O)
+	AndersConstraint(ConstraintType Ty, NodeIndex D, NodeIndex S, unsigned O = 0): type(Ty), dest(D), src(S), offset(O)
 	{
 		assert((offset == 0 || Ty != ADDR_OF) && "Offset is illegal on addressof constraints");
 	}
 
-	const AndersNode* getDest() const { return dest; }
-	const AndersNode* getSrc() const { return src; }
+	ConstraintType getType() const { return type; }
+	NodeIndex getDest() const { return dest; }
+	NodeIndex getSrc() const { return src; }
 	unsigned getOffset() const { return offset; }
 
 	bool operator==(const AndersConstraint &RHS) const

@@ -47,7 +47,10 @@
 
 #include "Constraint.h"
 #include "NodeFactory.h"
+#include "StructAnalyzer.h"
+
 #include "llvm/Pass.h"
+#include "llvm/IR/DataLayout.h"
 #include "llvm/Target/TargetLibraryInfo.h"
 
 #include <vector>
@@ -56,6 +59,7 @@ class Andersen: public llvm::ModulePass
 {
 private:
 	llvm::TargetLibraryInfo* tli;
+	const llvm::DataLayout* dataLayout;
 
 	// Constants that will become useful
 	static const unsigned SelfRep = (unsigned)-1;
@@ -65,7 +69,10 @@ private:
 	// Position of the function call node relative to the function node.
 	static const unsigned CallFirstArgPos = 2;
 
+	// A factory object that knows how to manage AndersNodes
 	AndersNodeFactory nodeFactory;
+	// A preliminary pass that collects info on structs
+	StructAnalyzer structAnalyzer;
 
 	/// Constraints - This vector contains a list of all of the constraints
 	/// identified by the program.
@@ -77,8 +84,13 @@ private:
 	void solveConstraints();
 
 	// Helper functions for constraint collection
-	void addGlobalInitializerConstraints(AndersObjectNode*, const llvm::Constant*);
+	void collectConstraintsForGlobals(llvm::Module&);
+	void processStruct(const llvm::Value*, const llvm::StructType*);
+	void addGlobalInitializerConstraints(NodeIndex, const llvm::Constant*);
 	void addConstraintForConstantPointer(const llvm::Value*);
+
+	// For debugging
+	void dumpConstraints() const;
 public:
 	static char ID;
 

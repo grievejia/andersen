@@ -7,7 +7,7 @@
 #include "llvm/Support/raw_ostream.h"
 
 using namespace llvm;
-
+/*
 // This function performs similar task to llvm::isAllocationFn (without the prototype check). However, the llvm version does not correctly handle functions like memalign and posix_memalign, and that is why we have to re-write it here again...
 static bool isMallocCall(ImmutableCallSite cs, const TargetLibraryInfo* tli)
 {
@@ -79,12 +79,10 @@ void Andersen::identifyObjects(Module& M)
 			}
 		}
 
-		errs() << "func " << f.getName() << "\n";
 		// Scan the function body, creating a memory object for each heap/stack allocation in the body of the function and a node to represent all pointer values defined by instructions and used as operands.
 		for (const_inst_iterator itr = inst_begin(f), ite = inst_end(f); itr != ite; ++itr)
 		{
 			const Instruction* inst = itr.getInstructionIterator();
-			errs() << "inst = " << *inst << "\n";
 			if (isa<PointerType>(inst->getType()))
 			{
 				nodeFactory.createValueNode(inst);
@@ -110,3 +108,4 @@ void Andersen::identifyObjects(Module& M)
 	}
 	
 }
+*/
