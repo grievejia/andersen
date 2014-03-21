@@ -58,7 +58,6 @@ private:
 	static const NodeIndex UniversalObjIndex = 1;
 	static const NodeIndex NullPtrIndex = 2;
 	static const NodeIndex NullObjectIndex = 3;
-	static const NodeIndex IntPtrIndex = 4;
 
 	// valueNodeMap - This map indicates the AndersNode* that a particular Value* corresponds to
 	llvm::DenseMap<const llvm::Value*, NodeIndex> valueNodeMap;
@@ -76,6 +75,9 @@ private:
 	/// function.  An entry is not present in this map for functions that do not
 	/// take variable arguments.
 	llvm::DenseMap<const llvm::Function*, NodeIndex> varargMap;
+
+	// gepMap - This map maintains the gep-relations across value nodes. The mappings are of the form <base-ptr, offset> -> gep-ptr, where base-ptr is the ValueNodeIndex for nodes that created out of llvm SSA variables while gep-ptr is the ValueNodeIndex for nodes that are created out of GEP instructions
+	llvm::DenseMap<std::pair<NodeIndex, unsigned>, NodeIndex> gepMap;
 
 	// Helper functions to do GEP translation
 	unsigned offsetToFieldNum(const llvm::Value* ptr, unsigned offset) const;
@@ -111,7 +113,6 @@ public:
 	NodeIndex getUniversalObjNode() const { return UniversalObjIndex; }
 	NodeIndex getNullPtrNode() const { return NullPtrIndex; }
 	NodeIndex getNullObjectNode() const { return NullObjectIndex; }
-	NodeIndex getIntPtrNode() const { return IntPtrIndex; }
 
 	// Size getters
 	unsigned getNumNodes() const { return nodes.size(); }

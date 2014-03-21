@@ -1,40 +1,12 @@
 #include "NodeFactory.h"
+#include "Helper.h"
 
 #include "llvm/IR/Constants.h"
-#include "llvm/IR/Operator.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/Analysis/ValueTracking.h"
 #include "llvm/Support/raw_ostream.h"
 
 using namespace llvm;
-
-// Given a GEP insn or GEP const expr, compute its byte-offset
-// The function will resolve nested GEP constexpr, but will not resolve nested GEP instruction
-static unsigned getGEPOffset(const Value* value, const DataLayout* dataLayout)
-{
-	// Assume this function always receives GEP value
-	const GEPOperator* gepValue = dyn_cast<GEPOperator>(value);
-	assert(gepValue != NULL && "getGEPOffset receives a non-gep value!");
-	assert(dataLayout != nullptr && "getGEPOffset receives a NULL dataLayout!");
-
-	unsigned offset = 0;
-	const Value* baseValue = gepValue->getPointerOperand()->stripPointerCasts();
-	// If we have yet another nested GEP const expr, accumulate its offset
-	// The reason why we don't accumulate nested GEP instruction's offset is that we aren't required to. Also, it is impossible to do that because we are not sure if the indices of a GEP instruction contains all-consts or not.
-	if (const ConstantExpr* cexp = dyn_cast<ConstantExpr>(baseValue))
-		if (cexp->getOpcode() == Instruction::GetElementPtr)
-			offset += getGEPOffset(cexp, dataLayout);
-
-	//errs() << "gepValue = " << *gepValue << "\n";
-	SmallVector<Value*, 4> indexOps(gepValue->op_begin() + 1, gepValue->op_end());
-	// Make sure all indices are constants
-	for (unsigned i = 0, e = indexOps.size(); i != e; ++i)
-		assert(isa<ConstantInt>(indexOps[i]) && "getGEPOffset does not accept non-const GEP indices!");
-
-	offset += dataLayout->getIndexedOffset(gepValue->getPointerOperand()->getType(), indexOps);
-
-	return offset;
-}
 
 AndersNodeFactory::AndersNodeFactory(): dataLayout(NULL)
 {
@@ -48,10 +20,8 @@ AndersNodeFactory::AndersNodeFactory(): dataLayout(NULL)
 	nodes.push_back(AndersNode(AndersNode::VALUE_NODE, 2));
 	// Node #3 is the object that null pointer points to
 	nodes.push_back(AndersNode(AndersNode::OBJ_NODE, 3));
-	// Node #4 represents all pointers casted to int
-	nodes.push_back(AndersNode(AndersNode::VALUE_NODE, 4));
 
-	assert(nodes.size() == 5);
+	assert(nodes.size() == 4);
 }
 
 NodeIndex AndersNodeFactory::createValueNode(const Value* val)
@@ -131,9 +101,8 @@ NodeIndex AndersNodeFactory::getValueNodeForConstant(const llvm::Constant* c)
 				assert(false && "This is wrong: avoid getting here!");
 				return getValueNodeForConstant(ce->getOperand(0));
 			case Instruction::IntToPtr:
-				return getUniversalPtrNode();
 			case Instruction::PtrToInt:
-				return getIntPtrNode();
+				return getUniversalPtrNode();
 			case Instruction::BitCast:
 				return getValueNodeForConstant(ce->getOperand(0));
 			default:
@@ -174,12 +143,14 @@ NodeIndex AndersNodeFactory::getObjectNodeForConstant(const llvm::Constant* c)
 			case Instruction::GetElementPtr:
 			{
 				NodeIndex baseNode = getObjectNodeForConstant(ce->getOperand(0));
+				assert(baseNode != InvalidIndex && "missing base obj node for gep");
 				if (baseNode == getNullObjectNode() || baseNode == getUniversalObjNode())
 					return baseNode;
 
 				return getOffsetObjectNode(baseNode, constGEPtoFieldNum(ce));
 			}
 			case Instruction::IntToPtr:
+			case Instruction::PtrToInt:
 				return getUniversalObjNode();
 			case Instruction::BitCast:
 				return getObjectNodeForConstant(ce->getOperand(0));

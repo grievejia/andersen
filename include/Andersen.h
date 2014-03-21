@@ -51,6 +51,7 @@
 
 #include "llvm/Pass.h"
 #include "llvm/IR/DataLayout.h"
+#include "llvm/IR/CallSite.h"
 #include "llvm/Target/TargetLibraryInfo.h"
 
 #include <vector>
@@ -85,9 +86,12 @@ private:
 
 	// Helper functions for constraint collection
 	void collectConstraintsForGlobals(llvm::Module&);
+	void collectConstraintsForInstruction(const llvm::Instruction*);
 	void processStruct(const llvm::Value*, const llvm::StructType*);
 	void addGlobalInitializerConstraints(NodeIndex, const llvm::Constant*);
-	void addConstraintForConstantPointer(const llvm::Value*);
+	void addConstraintForCall(llvm::ImmutableCallSite cs);
+	bool addConstraintForExternalLibrary(llvm::ImmutableCallSite cs);
+	void addArgumentConstraintForCall(llvm::ImmutableCallSite cs, const llvm::Function* f);
 
 	// For debugging
 	void dumpConstraints() const;
@@ -99,6 +103,5 @@ public:
 	void getAnalysisUsage(llvm::AnalysisUsage &AU) const;
 	void releaseMemory();
 };
-
 
 #endif
