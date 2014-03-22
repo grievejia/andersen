@@ -24,12 +24,16 @@ unsigned getGEPOffset(const Value* value, const DataLayout* dataLayout)
 			offset += getGEPOffset(cexp, dataLayout);
 
 	//errs() << "gepValue = " << *gepValue << "\n";
+	Type* ptrTy = gepValue->getPointerOperand()->getType();
 	SmallVector<Value*, 4> indexOps(gepValue->op_begin() + 1, gepValue->op_end());
 	// Make sure all indices are constants
 	for (unsigned i = 0, e = indexOps.size(); i != e; ++i)
-		assert(isa<ConstantInt>(indexOps[i]) && "getGEPOffset does not accept non-const GEP indices!");
+	{
+		if (!isa<ConstantInt>(indexOps[i]))
+			indexOps[i] = ConstantInt::get(Type::getInt32Ty(ptrTy->getContext()), 0);
+	}
 
-	offset += dataLayout->getIndexedOffset(gepValue->getPointerOperand()->getType(), indexOps);
+	offset += dataLayout->getIndexedOffset(ptrTy, indexOps);
 
 	return offset;
 }

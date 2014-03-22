@@ -42,6 +42,8 @@ typedef unsigned NodeIndex;
 class AndersNodeFactory
 {
 public:
+	typedef llvm::DenseMap<std::pair<NodeIndex, unsigned>, NodeIndex> GepMap;
+
 	// The largest unsigned int is reserved for invalid index
 	static const unsigned InvalidIndex = std::numeric_limits<unsigned int>::max();
 private:
@@ -77,7 +79,7 @@ private:
 	llvm::DenseMap<const llvm::Function*, NodeIndex> varargMap;
 
 	// gepMap - This map maintains the gep-relations across value nodes. The mappings are of the form <base-ptr, offset> -> gep-ptr, where base-ptr is the ValueNodeIndex for nodes that created out of llvm SSA variables while gep-ptr is the ValueNodeIndex for nodes that are created out of GEP instructions
-	llvm::DenseMap<std::pair<NodeIndex, unsigned>, NodeIndex> gepMap;
+	GepMap gepMap;
 
 	// Helper functions to do GEP translation
 	unsigned offsetToFieldNum(const llvm::Value* ptr, unsigned offset) const;
@@ -103,8 +105,13 @@ public:
 	NodeIndex getVarargNodeFor(const llvm::Function* f);
 
 	// Pointer arithmetic
+	bool isObjectNode(NodeIndex i)
+	{
+		return (nodes.at(i).type == AndersNode::OBJ_NODE);
+	}
 	NodeIndex getOffsetObjectNode(NodeIndex n, unsigned offset)
 	{
+		assert(isObjectNode(n + offset));
 		return n + offset;
 	}
 
@@ -114,8 +121,19 @@ public:
 	NodeIndex getNullPtrNode() const { return NullPtrIndex; }
 	NodeIndex getNullObjectNode() const { return NullObjectIndex; }
 
+	// Value getters
+	const llvm::Value* getValueForNode(NodeIndex i)
+	{
+		return nodes.at(i).getValue();
+	}
+
 	// Size getters
 	unsigned getNumNodes() const { return nodes.size(); }
+
+	// GepMap interfaces
+	GepMap::const_iterator gepmap_begin() const { return gepMap.begin(); }
+	GepMap::const_iterator gepmap_end() const { return gepMap.end(); }
+	void clearGepMap() { gepMap.clear(); }
 
 	// For debugging purpose
 	void dumpNode(NodeIndex) const;

@@ -63,12 +63,10 @@ private:
 	const llvm::DataLayout* dataLayout;
 
 	// Constants that will become useful
-	static const unsigned SelfRep = (unsigned)-1;
-	static const unsigned Unvisited = (unsigned)-1;
 	// Position of the function return node relative to the function node.
-	static const unsigned CallReturnPos = 1;
+	static const unsigned CallReturnPos;
 	// Position of the function call node relative to the function node.
-	static const unsigned CallFirstArgPos = 2;
+	static const unsigned CallFirstArgPos;
 
 	// A factory object that knows how to manage AndersNodes
 	AndersNodeFactory nodeFactory;
@@ -82,6 +80,7 @@ private:
 	// Three main phases
 	void identifyObjects(llvm::Module&);
 	void collectConstraints(llvm::Module&);
+	void optimizeConstraints();
 	void solveConstraints();
 
 	// Helper functions for constraint collection
@@ -90,10 +89,11 @@ private:
 	void processStruct(const llvm::Value*, const llvm::StructType*);
 	void addGlobalInitializerConstraints(NodeIndex, const llvm::Constant*);
 	void addConstraintForCall(llvm::ImmutableCallSite cs);
-	bool addConstraintForExternalLibrary(llvm::ImmutableCallSite cs);
+	bool addConstraintForExternalLibrary(llvm::ImmutableCallSite cs, const llvm::Function* f);
 	void addArgumentConstraintForCall(llvm::ImmutableCallSite cs, const llvm::Function* f);
 
 	// For debugging
+	void dumpConstraint(const AndersConstraint&) const;
 	void dumpConstraints() const;
 public:
 	static char ID;

@@ -26,6 +26,7 @@ AndersNodeFactory::AndersNodeFactory(): dataLayout(NULL)
 
 NodeIndex AndersNodeFactory::createValueNode(const Value* val)
 {
+	//errs() << "inserting " << *val << "\n";
 	unsigned nextIdx = nodes.size();
 	nodes.push_back(AndersNode(AndersNode::VALUE_NODE, nextIdx, val));
 	if (val != nullptr)
@@ -64,7 +65,7 @@ NodeIndex AndersNodeFactory::createReturnNode(const llvm::Function* f)
 NodeIndex AndersNodeFactory::createVarargNode(const llvm::Function* f)
 {
 	unsigned nextIdx = nodes.size();
-	nodes.push_back(AndersNode(AndersNode::VALUE_NODE, nextIdx, f));
+	nodes.push_back(AndersNode(AndersNode::OBJ_NODE, nextIdx, f));
 
 	assert(!varargMap.count(f) && "Trying to insert two mappings to varargMap!");
 	varargMap[f] = nextIdx;
@@ -78,6 +79,7 @@ NodeIndex AndersNodeFactory::getValueNodeFor(const Value* val)
 		if (!isa<GlobalValue>(c))
 			return getValueNodeForConstant(c);
 
+	//errs() << "looking up " << *val << "\n";
 	auto itr = valueNodeMap.find(val);
 	if (itr == valueNodeMap.end())
 		return InvalidIndex;
@@ -87,6 +89,7 @@ NodeIndex AndersNodeFactory::getValueNodeFor(const Value* val)
 
 NodeIndex AndersNodeFactory::getValueNodeForConstant(const llvm::Constant* c)
 {
+	errs() << "c = " << *c << "\n";
 	assert(isa<PointerType>(c->getType()) && "Not a constant pointer!");
 	
 	if (isa<ConstantPointerNull>(c) || isa<UndefValue>(c))
@@ -98,8 +101,28 @@ NodeIndex AndersNodeFactory::getValueNodeForConstant(const llvm::Constant* c)
 		switch (ce->getOpcode())
 		{
 			case Instruction::GetElementPtr:
-				assert(false && "This is wrong: avoid getting here!");
-				return getValueNodeForConstant(ce->getOperand(0));
+			{
+				NodeIndex baseNode = getValueNodeForConstant(ce->getOperand(0));
+				assert(baseNode != InvalidIndex && "missing base val node for gep");
+
+				if (baseNode == getNullObjectNode() || baseNode == getUniversalObjNode())
+					return baseNode;
+
+				unsigned fieldNum = constGEPtoFieldNum(ce);
+				if (fieldNum == 0)
+					return baseNode;
+
+				auto mapKey = std::make_pair(baseNode, fieldNum);
+				auto itr = gepMap.find(mapKey);
+				if (itr == gepMap.end())
+				{
+					NodeIndex gepIndex = createValueNode(ce);
+					gepMap.insert(std::make_pair(mapKey, gepIndex));
+					return gepIndex;
+				}
+				else
+					return itr->second;
+			}
 			case Instruction::IntToPtr:
 			case Instruction::PtrToInt:
 				return getUniversalPtrNode();
@@ -254,7 +277,7 @@ void AndersNodeFactory::dumpNodeInfo() const
 		else if (isa<Function>(val))
 			errs() << "  <func> " << val->getName();
 		else
-			errs() << val->getName();
+			errs() << *val;
 		errs() << "\n";
 	}
 
