@@ -105,11 +105,11 @@ public:
 	NodeIndex getVarargNodeFor(const llvm::Function* f);
 
 	// Pointer arithmetic
-	bool isObjectNode(NodeIndex i)
+	bool isObjectNode(NodeIndex i) const
 	{
 		return (nodes.at(i).type == AndersNode::OBJ_NODE);
 	}
-	NodeIndex getOffsetObjectNode(NodeIndex n, unsigned offset)
+	NodeIndex getOffsetObjectNode(NodeIndex n, unsigned offset) const
 	{
 		assert(isObjectNode(n + offset));
 		return n + offset;

@@ -92,6 +92,12 @@ private:
 	bool addConstraintForExternalLibrary(llvm::ImmutableCallSite cs, const llvm::Function* f);
 	void addArgumentConstraintForCall(llvm::ImmutableCallSite cs, const llvm::Function* f);
 
+	// Helper functions for constraint optimization
+	void hvn();
+	void hvnVisit(NodeIndex n);
+	NodeIndex getRefNodeIndex(NodeIndex n) const;
+	NodeIndex getAdrNodeIndex(NodeIndex n) const;
+
 	// For debugging
 	void dumpConstraint(const AndersConstraint&) const;
 	void dumpConstraints() const;
