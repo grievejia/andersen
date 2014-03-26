@@ -6,7 +6,11 @@
 #include "llvm/Analysis/ValueTracking.h"
 #include "llvm/Support/raw_ostream.h"
 
+#include <limits>
+
 using namespace llvm;
+
+const unsigned AndersNodeFactory::InvalidIndex = std::numeric_limits<unsigned int>::max();
 
 AndersNodeFactory::AndersNodeFactory(): dataLayout(NULL)
 {
@@ -203,6 +207,25 @@ NodeIndex AndersNodeFactory::getVarargNodeFor(const llvm::Function* f)
 		return InvalidIndex;
 	else
 		return itr->second;
+}
+
+void AndersNodeFactory::mergeNode(NodeIndex n0, NodeIndex n1)
+{
+	assert(n0 < nodes.size() && n1 < nodes.size());
+	nodes[n1].mergeTarget = n0;
+}
+
+NodeIndex AndersNodeFactory::getMergeTarget(NodeIndex n)
+{
+	assert(n < nodes.size());
+	NodeIndex ret = nodes[n].mergeTarget;
+	if (ret != n)
+	{
+		ret = getMergeTarget(ret);
+		nodes[n].mergeTarget = ret;
+	}
+	assert(ret < nodes.size());
+	return ret;
 }
 
 unsigned AndersNodeFactory::constGEPtoFieldNum(const llvm::ConstantExpr* expr) const

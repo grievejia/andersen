@@ -25,6 +25,7 @@ bool Andersen::runOnModule(Module &M)
 	nodeFactory.dumpNodeInfo();
 	dumpConstraints();
 	optimizeConstraints();
+	dumpConstraints();
 	
 	solveConstraints();
 

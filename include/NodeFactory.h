@@ -10,10 +10,10 @@
 #include "llvm/ADT/DenseMap.h"
 
 #include <vector>
-#include <limits>
 
-// Node class - This class is used to represent a node in the constraint graph.  Due to various optimizations, it is not always the case that there is always a mapping from a Node to a Value. (In particular, we add artificial Node's that represent the set of pointed-to variables shared for each location equivalent Node.
+// AndersNode class - This class is used to represent a node in the constraint graph.  Due to various optimizations, it is not always the case that there is always a mapping from a Node to a Value. (In particular, we add artificial Node's that represent the set of pointed-to variables shared for each location equivalent Node.
 // Ordinary clients are not allowed to create AndersNode objects. To guarantee index consistency, AndersNodes (and its subclasses) instances should only be created through AndersNodeFactory.
+typedef unsigned NodeIndex;
 class AndersNode
 {
 public:
@@ -24,17 +24,15 @@ public:
 	};
 private:
 	AndersNodeType type;
-	unsigned idx;
+	NodeIndex idx, mergeTarget;
 	const llvm::Value* value;
-	AndersNode(AndersNodeType t, unsigned i, const llvm::Value* v = NULL): type(t), idx(i), value(v) {}
+	AndersNode(AndersNodeType t, unsigned i, const llvm::Value* v = NULL): type(t), idx(i), mergeTarget(i), value(v) {}
 public:
-	unsigned getIndex() const { return idx; }
+	NodeIndex getIndex() const { return idx; }
 	const llvm::Value* getValue() const { return value; }
 
 	friend class AndersNodeFactory;
 };
-
-typedef unsigned NodeIndex;
 
 // This is the factory class of AndersNode
 // It use a vectors to hold all Nodes in the program
@@ -45,7 +43,7 @@ public:
 	typedef llvm::DenseMap<std::pair<NodeIndex, unsigned>, NodeIndex> GepMap;
 
 	// The largest unsigned int is reserved for invalid index
-	static const unsigned InvalidIndex = std::numeric_limits<unsigned int>::max();
+	static const unsigned InvalidIndex;
 private:
 	// The datalayout info
 	const llvm::DataLayout* dataLayout;
@@ -103,6 +101,10 @@ public:
 	NodeIndex getObjectNodeForConstant(const llvm::Constant* c);
 	NodeIndex getReturnNodeFor(const llvm::Function* f);
 	NodeIndex getVarargNodeFor(const llvm::Function* f);
+
+	// Node merge interfaces
+	void mergeNode(NodeIndex n0, NodeIndex n1);	// Merge n1 into n0
+	NodeIndex getMergeTarget(NodeIndex n);
 
 	// Pointer arithmetic
 	bool isObjectNode(NodeIndex i) const
