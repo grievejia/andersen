@@ -22,14 +22,11 @@ bool Andersen::runOnModule(Module &M)
 	nodeFactory.setDataLayout(dataLayout);
 
 	collectConstraints(M);
-	nodeFactory.dumpNodeInfo();
-	dumpConstraints();
+	//nodeFactory.dumpNodeInfo();
+	//dumpConstraints();
 	optimizeConstraints();
-	dumpConstraints();
 	
 	solveConstraints();
-
-	constraints.clear();
 
 	return false;
 }

@@ -93,7 +93,6 @@ NodeIndex AndersNodeFactory::getValueNodeFor(const Value* val)
 
 NodeIndex AndersNodeFactory::getValueNodeForConstant(const llvm::Constant* c)
 {
-	errs() << "c = " << *c << "\n";
 	assert(isa<PointerType>(c->getType()) && "Not a constant pointer!");
 	
 	if (isa<ConstantPointerNull>(c) || isa<UndefValue>(c))

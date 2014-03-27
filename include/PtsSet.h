@@ -43,6 +43,11 @@ public:
 		return bitvec |= other.bitvec;
 	}
 
+	void clear()
+	{
+		bitvec.clear();
+	}
+
 	unsigned getSize() const
 	{
 		return bitvec.count();		// NOT a constant time operation!

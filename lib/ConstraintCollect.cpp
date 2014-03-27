@@ -72,38 +72,6 @@ void Andersen::collectConstraints(Module& M)
 	nodeFactory.clearGepMap();
 }
 
-// This function performs similar task to llvm::isAllocationFn (without the prototype check). However, the llvm version does not correctly handle functions like memalign and posix_memalign, and that is why we have to re-write it here again...
-static bool isMallocCall(ImmutableCallSite cs, const TargetLibraryInfo* tli)
-{
-	const Function* callee = cs.getCalledFunction();
-	if (callee == nullptr || !callee->isDeclaration())
-		return false;
-
-	static const LibFunc::Func AllocationFns[] = {
-		LibFunc::malloc, LibFunc::valloc, LibFunc::calloc,
-		LibFunc::Znwj, LibFunc::ZnwjRKSt9nothrow_t,
-		LibFunc::Znwm, LibFunc::ZnwmRKSt9nothrow_t, 
-		LibFunc::Znaj, LibFunc::ZnajRKSt9nothrow_t, 
-		LibFunc::Znam, LibFunc::ZnamRKSt9nothrow_t, 
-		LibFunc::strdup, LibFunc::strndup,
-		LibFunc::memalign, LibFunc::posix_memalign 
-	};
-
-	StringRef fName = callee->getName();
-	LibFunc::Func tliFunc;
-	if (tli == NULL || !tli->getLibFunc(fName, tliFunc))
-		return false;
-
-	for (unsigned i = 0, e = array_lengthof(AllocationFns); i < e; ++i)
-	{
-		if (AllocationFns[i] == tliFunc)
-			return true;
-	}
-
-	// TODO: check prototype
-	return false;
-}
-
 void Andersen::collectConstraintsForGlobals(Module& M)
 {
 	for (auto const& globalVal: M.globals())
@@ -261,7 +229,7 @@ static unsigned getGEPInstFieldNum(const GetElementPtrInst* gepInst, const DataL
 {
 	unsigned offset= getGEPOffset(gepInst, dataLayout);
 
-	const Value* ptr = GetUnderlyingObject(gepInst->getPointerOperand(), dataLayout, 0);
+	const Value* ptr = gepInst->getPointerOperand()->stripPointerCasts();
 	Type* trueElemType = cast<PointerType>(ptr->getType())->getElementType();
 
 	unsigned ret = 0;
@@ -314,33 +282,6 @@ void Andersen::collectConstraintsForInstruction(const Instruction* inst)
 		{
 			ImmutableCallSite cs(inst);
 			assert(cs && "Something wrong with callsite?");
-
-			if (isMallocCall(cs, tli))
-			{
-				// Create the heap node
-				NodeIndex objIndex = nodeFactory.createObjectNode(inst);
-
-				NodeIndex ptrIndex = nodeFactory.getValueNodeFor(inst);
-				if (ptrIndex == AndersNodeFactory::InvalidIndex)
-				{
-					// Must be something like posix_memalign()
-					if (cs.getCalledFunction()->getName() == "posix_memalign")
-					{
-						ptrIndex = nodeFactory.getValueNodeFor(cs.getArgument(0));
-						assert(ptrIndex != AndersNodeFactory::InvalidIndex && "Failed to find arg0 node");
-						constraints.emplace_back(AndersConstraint::STORE, ptrIndex, objIndex);
-					}
-					else
-						assert(false && "unrecognized malloc call");
-				}
-				else
-				{
-					// Normal malloc-like call 
-					constraints.emplace_back(AndersConstraint::ADDR_OF, ptrIndex, objIndex);
-				}
-				
-				return;
-			}
 
 			addConstraintForCall(cs);
 

@@ -65,6 +65,8 @@ public:
 	bool isFieldArray(unsigned field) const { return arrayFlags.at(field); }
 	bool isFieldPointer(unsigned field) const { return pointerFlags.at(field); }
 	unsigned getOffset(unsigned off) const { return offsetMap.at(off); }
+
+	static unsigned getMaxStructSize() { return maxStructSize; }
 	
 	friend class StructAnalyzer;
 };

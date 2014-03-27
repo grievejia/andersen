@@ -28,7 +28,10 @@ static const char* noopFuncs[] = {
 	"fabs", "pow", "floor", "ceil", "sqrt", "sqrtf", "hypot", 
 	"random", "tolower","toupper", "towlower", "towupper", "system", "clock",
 	"exit", "abort", "gettimeofday", "settimeofday",
-	"rand", "rand_r", "srand", "seed48", "drand48", "lrand48", "srand48"
+	"rand", "rand_r", "srand", "seed48", "drand48", "lrand48", "srand48",
+	"__isoc99_sscanf", "fclose", "close", "perror", 
+	"strerror", // this function returns an extenal static pointer
+	"__errno_location", "__ctype_b_loc", "abs", "difftime", "setbuf",
 	"_ZdlPv", "_ZdaPv",	// delete and delete[]
 	"fesetround", "fegetround", "fetestexcept", "feraiseexcept", "feclearexcept",
 	"llvm.bswap.i16", "llvm.bswap.i32", "llvm.ctlz.i64",
@@ -38,8 +41,23 @@ static const char* noopFuncs[] = {
 	nullptr
 };
 
+static const char* mallocFuncs[] = {
+	"malloc", "valloc", "calloc",
+	"Znwj", "ZnwjRKSt9nothrow_t", "Znwm", "ZnwmRKSt9nothrow_t", 
+	"Znaj", "ZnajRKSt9nothrow_t", "Znam", "ZnamRKSt9nothrow_t", 
+	"strdup", "strndup",
+	"getenv",
+	"memalign", "posix_memalign",
+	nullptr
+};
+
+static const char* reallocFuncs[] = {
+	"realloc", "strtok", "strtok_r", "getcwd",
+	nullptr
+};
+
 static const char* retArg0Funcs[] = {
-	"fgets", "gets", "realloc", "stpcpy",  "strcat", "strchr", "strcpy",
+	"fgets", "gets", "stpcpy",  "strcat", "strchr", "strcpy",
 	"strerror_r", "strncat", "strncpy", "strpbrk", "strptime", "strrchr", "strstr",
 	nullptr
 };
@@ -61,7 +79,7 @@ static const char* convertFuncs[] = {
 	nullptr
 };
 
-bool lookupName(const char* table[], const char* str)
+static bool lookupName(const char* table[], const char* str)
 {
 	for (unsigned i = 0; table[i] != nullptr; ++i)
 	{
@@ -69,6 +87,53 @@ bool lookupName(const char* table[], const char* str)
 			return true;
 	}
 	return false;
+}
+
+static unsigned traceAllocSize(const Instruction* inst, const StructAnalyzer& structAnalyzer)
+{
+	assert(inst != NULL);
+	const PointerType* pType = cast<PointerType>(inst->getType());
+	const Type* elemType = pType->getElementType();
+	
+	unsigned maxSize = 0;
+	while (const ArrayType* arrayType = dyn_cast<ArrayType>(elemType))
+		elemType = arrayType->getElementType();
+	if (const StructType* stType = dyn_cast<StructType>(elemType))
+	{
+		const StructInfo* stInfo = structAnalyzer.getStructInfo(stType);
+		assert(stInfo != NULL && "structInfoMap should have info for all structs!");
+		maxSize = stInfo->getExpandedSize();
+	}
+	
+	// Check all the users of inst
+	for (auto const& useInst: inst->uses())
+	{
+		CastInst* castInst = dyn_cast<CastInst>(useInst);
+		if (castInst == NULL)
+			continue;
+		//Only check casts to other ptr types.
+		const PointerType* castType = dyn_cast<PointerType>(castInst->getType());
+		if (castType == NULL)
+			continue;
+		
+		const Type* elemType = castType->getElementType();
+		while (const ArrayType* arrayType = dyn_cast<ArrayType>(elemType))
+			elemType = arrayType->getElementType();
+			
+		if (const StructType* stType = dyn_cast<StructType>(elemType))
+		{
+			const StructInfo* stInfo = structAnalyzer.getStructInfo(stType);
+			assert(stInfo != NULL && "structInfoMap should have info for all structs!");
+			if (stInfo->getExpandedSize() > maxSize)
+				maxSize = stInfo->getExpandedSize();
+		}
+	}
+	
+	// If the allocation is of non-struct type and we can't find any casts, assume that it may be cast to the largest struct later on.
+	if (maxSize == 0)
+		return StructInfo::getMaxStructSize();
+	else
+		return maxSize;
 }
 
 // This function identifies if the external callsite is a library function call, and add constraint correspondingly
@@ -82,7 +147,47 @@ bool Andersen::addConstraintForExternalLibrary(ImmutableCallSite cs, const Funct
 	if (lookupName(noopFuncs, f->getName().data()))
 		return true;
 
-	if (lookupName(retArg0Funcs, f->getName().data()))
+	// Realloc-like library is a little different: if the first argument is NULL, then it behaves like retArg0Funcs; otherwise, it behaves like mallocFuncs
+	bool isReallocLike = lookupName(reallocFuncs, f->getName().data());
+
+	// Library calls that might allocate memory.
+	// The complicated issue here is that if the allocation is of struct type, then we have to find the size of that struct, which is often not obvious
+	if (lookupName(mallocFuncs, f->getName().data()) || (isReallocLike && !isa<ConstantPointerNull>(cs.getArgument(0))))
+	{
+		const Instruction* inst = cs.getInstruction();
+		unsigned mallocSize = traceAllocSize(inst, structAnalyzer);
+
+		// Create the first heap node
+		NodeIndex objIndex = nodeFactory.createObjectNode(inst);
+		// Create the rest heap nodes
+		for (unsigned i = 1; i < mallocSize; ++i)
+			nodeFactory.createObjectNode();
+
+		// Get the pointer node
+		NodeIndex ptrIndex = nodeFactory.getValueNodeFor(inst);
+
+		if (ptrIndex == AndersNodeFactory::InvalidIndex)
+		{
+			// Must be something like posix_memalign()
+			if (cs.getCalledFunction()->getName() == "posix_memalign")
+			{
+				ptrIndex = nodeFactory.getValueNodeFor(cs.getArgument(0));
+				assert(ptrIndex != AndersNodeFactory::InvalidIndex && "Failed to find arg0 node");
+				constraints.emplace_back(AndersConstraint::STORE, ptrIndex, objIndex);
+			}
+			else
+				assert(false && "unrecognized malloc call");
+		}
+		else
+		{
+			// Normal malloc-like call 
+			constraints.emplace_back(AndersConstraint::ADDR_OF, ptrIndex, objIndex);
+		}
+		
+		return true;
+	}
+
+	if (lookupName(retArg0Funcs, f->getName().data()) || (isReallocLike && isa<ConstantPointerNull>(cs.getArgument(0))))
 	{
 		NodeIndex retIndex = nodeFactory.getValueNodeFor(cs.getInstruction());
 		assert(retIndex != AndersNodeFactory::InvalidIndex && "Failed to find call site node");

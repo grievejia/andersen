@@ -63,7 +63,7 @@ protected:
 	// We won't actually create that adr node. We cannot use the NodeIndex of that adrNode to index into nodeFactory
 	NodeIndex getAdrNodeIndex(NodeIndex n) const
 	{
-		assert(nodeFactory.isObjectNode(n) && "ADR node of a top-level var does not make sense!");
+		//assert(nodeFactory.isObjectNode(n) && "ADR node of a top-level var does not make sense!");
 		return n + 2 * nodeFactory.getNumNodes();
 	}
 
@@ -71,31 +71,33 @@ protected:
 	{
 		for (auto const& c: constraints)
 		{
+			NodeIndex srcTgt = nodeFactory.getMergeTarget(c.getSrc());
+			NodeIndex dstTgt = nodeFactory.getMergeTarget(c.getDest());
 			switch (c.getType())
 			{
 				case AndersConstraint::ADDR_OF:
 				{
-					indirectNodes.insert(c.getSrc());
+					indirectNodes.insert(srcTgt);
 					// Dest = &src edge
-					predGraph[c.getDest()].set(getAdrNodeIndex(c.getSrc()));
+					predGraph[dstTgt].set(getAdrNodeIndex(srcTgt));
 					// *Dest = src edge
-					predGraph[getRefNodeIndex(c.getDest())].set(c.getSrc());
+					predGraph[getRefNodeIndex(dstTgt)].set(srcTgt);
 					break;
 				}
 				case AndersConstraint::LOAD:
 				{
 					// dest = *src edge
 					if (c.getOffset() == 0)
-						predGraph[c.getDest()].set(getRefNodeIndex(c.getSrc()));
+						predGraph[dstTgt].set(getRefNodeIndex(srcTgt));
 					else
-						indirectNodes.insert(c.getDest());
+						indirectNodes.insert(dstTgt);
 					break;
 				}
 				case AndersConstraint::STORE:
 				{
 					// *dest = src edge
 					if (c.getOffset() == 0)
-						predGraph[getRefNodeIndex(c.getDest())].set(c.getSrc());
+						predGraph[getRefNodeIndex(dstTgt)].set(srcTgt);
 					break;
 				}
 				case AndersConstraint::COPY:
@@ -103,12 +105,12 @@ protected:
 					if (c.getOffset() == 0)
 					{
 						// Dest = Src edge
-						predGraph[c.getDest()].set(c.getSrc());
+						predGraph[dstTgt].set(srcTgt);
 						// *Dest = *Src edge
-						predGraph[getRefNodeIndex(c.getDest())].set(getRefNodeIndex(c.getSrc()));
+						predGraph[getRefNodeIndex(dstTgt)].set(getRefNodeIndex(srcTgt));
 					}
 					else
-						indirectNodes.insert(c.getDest());
+						indirectNodes.insert(dstTgt);
 					break;
 				}
 			}
@@ -214,24 +216,20 @@ protected:
 			// First, if the lhs or rhs of c has label 0 (non-ptr), ignore this constraint
 			if (peLabel[c.getDest()] == 0 || peLabel[c.getSrc()] == 0)
 				continue;
+			// Change the lhs to its mergeTarget
+			NodeIndex destTgt = nodeFactory.getMergeTarget(c.getDest());
+			// Change the rhs to its merge target
+			NodeIndex srcTgt = nodeFactory.getMergeTarget(c.getSrc());
 			switch (c.getType())
 			{
 				case AndersConstraint::ADDR_OF:
 				{
-					// Change the lhs to its mergeTarget
-					NodeIndex destTgt = nodeFactory.getMergeTarget(c.getDest());
-					// Change the rhs to its merge target
-					NodeIndex srcTgt = nodeFactory.getMergeTarget(c.getSrc());
 					newConstraints.emplace_back(AndersConstraint::ADDR_OF, destTgt, srcTgt);
 
 					break;
 				}
 				case AndersConstraint::LOAD:
 				{
-					// Change the lhs to its mergeTarget
-					NodeIndex destTgt = nodeFactory.getMergeTarget(c.getDest());
-					// Change the rhs to its mergeTarget
-					NodeIndex srcTgt = nodeFactory.getMergeTarget(c.getSrc());
 					// If the rhs is equivalent to some ADR node, then we are able to replace the load with a copy
 					NodeIndex srcTgtTgt = revLabelMap[peLabel[srcTgt]];
 					if (srcTgtTgt > nodeFactory.getNumNodes())
@@ -251,10 +249,6 @@ protected:
 				}
 				case AndersConstraint::STORE:
 				{
-					// Change the lhs to its mergeTarget
-					NodeIndex destTgt = nodeFactory.getMergeTarget(c.getDest());
-					// Change the rhs to its mergeTarget
-					NodeIndex srcTgt = nodeFactory.getMergeTarget(c.getSrc());
 					// If the lhs is equivalent to some ADR node, then we are able to replace the store with a copy
 					NodeIndex destTgtTgt = revLabelMap[peLabel[destTgt]];
 					if (destTgtTgt > nodeFactory.getNumNodes())
@@ -274,11 +268,6 @@ protected:
 				}
 				case AndersConstraint::COPY:
 				{
-					// Change the lhs to its mergeTarget
-					NodeIndex destTgt = nodeFactory.getMergeTarget(c.getDest());
-					// Change the rhs to its mergeTarget
-					NodeIndex srcTgt = nodeFactory.getMergeTarget(c.getSrc());
-
 					// Remove useless constraint "A=A"
 					if (destTgt == srcTgt && c.getOffset() == 0)
 						break;
@@ -304,6 +293,13 @@ protected:
 		// There may be repetitive constraints. Uniquify them
 		std::set<AndersConstraint> constraintSet(newConstraints.begin(), newConstraints.end());
 		constraints.assign(constraintSet.begin(), constraintSet.end());
+	}
+
+	virtual void releaseMemory()
+	{
+		indirectNodes.clear();
+		predGraph.clear();
+		peLabel.clear();
 	}
 
 	virtual void visit(NodeIndex node) = 0;
@@ -441,6 +437,15 @@ public:
 			mergeTarget[i] = i;
 	}
 
+	void releaseMemory() override
+	{
+		ConstraintOptimizer::releaseMemory();
+		dfsNum.clear();
+		inComponent.clear();
+		setLabel.clear();
+		mergeTarget.clear();
+	}
+
 	void run() override
 	{
 		// Build a predecessor graph.  This is like our constraint graph with the edges going in the opposite direction, and there are edges for all the constraints, instead of just copy constraints.  We also build implicit edges for constraints are implied but not explicit.  I.E for the constraint a = &b, we add implicit edges *a = b.  This helps us capture more cycles
@@ -486,16 +491,94 @@ public:
 class HUOptimizer: public ConstraintOptimizer
 {
 private:
+	std::deque<bool> visited;
+	// Map from a set of NodeIndex to Pointer Equivalence Class
+	std::unordered_map<SparseBitVector<>, unsigned, SparseBitVectorHash, SparseBitVectorKeyEqual> setLabel;
+	// Map from NodeIndex to its offline pts-set
+	std::vector<SparseBitVector<>> ptsSet;
+
 	void visit(NodeIndex node) override
 	{
+		assert(node < nodeFactory.getNumNodes() * 3 && "Visiting a non-existent node!");
+		visited[node] = true;
 
+		// Traverse predecessor edges
+		auto predItr = predGraph.find(node);
+		if (predItr != predGraph.end())
+		{
+			const SparseBitVector<>& edges = predItr->second;
+			for (auto const& pred: edges)
+				if (!visited[pred])
+					visit(pred);
+		}
+
+		// If node is indirect, assign a new label to it
+		if (node > nodeFactory.getNumNodes() || indirectNodes.count(node))
+		{
+			ptsSet[node].set(pointerEqClass);
+			peLabel[node] = pointerEqClass;
+			++pointerEqClass;
+			return;
+		}
+
+		// For direct nodes, collect the predecessor's ptsset
+		SparseBitVector<>& myPtsSet = ptsSet[node];
+		if (predItr != predGraph.end())
+		{
+			const SparseBitVector<>& edges = predItr->second;
+			for (auto const& pred: edges)
+				myPtsSet |= ptsSet[pred];
+		}
+
+		// If the ptsSet is empty, assign a label of zero
+		if (myPtsSet.empty())
+			peLabel[node] = 0;
+		// Otherwise, see if we have seen this pattern before
+		else
+		{
+			auto labelItr = setLabel.find(myPtsSet);
+			if (labelItr != setLabel.end())
+			{
+				peLabel[node] = labelItr->second;
+			}
+			else
+			{
+				setLabel.insert(std::make_pair(myPtsSet, pointerEqClass));
+				peLabel[node] = pointerEqClass;
+				++pointerEqClass;
+			}
+		}
 	}
 public:
-	HUOptimizer(std::vector<AndersConstraint>& c, AndersNodeFactory& n): ConstraintOptimizer(c, n) {}
+	HUOptimizer(std::vector<AndersConstraint>& c, AndersNodeFactory& n): ConstraintOptimizer(c, n), visited(nodeFactory.getNumNodes() * 3), ptsSet(nodeFactory.getNumNodes() * 3) {}
+
+	void releaseMemory() override
+	{
+		ConstraintOptimizer::releaseMemory();
+		visited.clear();
+		ptsSet.clear();
+		setLabel.clear();
+	}
 
 	void run() override
 	{
+		// Build a predecessor graph
+		buildPredecessorGraph();
 
+		// Assume we have no cylces in the predecessor graph (if we have, then they are already collapsed in HVN), here we can just do the plain DFS directly
+		for (unsigned i = 0, e = nodeFactory.getNumNodes(); i < e; ++i)
+		{
+			NodeIndex rep = nodeFactory.getMergeTarget(i);
+			if (!visited[rep])
+				visit(rep);
+			if (!visited[getRefNodeIndex(rep)])
+				visit(getRefNodeIndex(rep));
+			if (!visited[getAdrNodeIndex(rep)])
+				visit(getAdrNodeIndex(rep));
+		}
+
+		// We've done labelling. Now rewrite all constraints
+		rewriteConstraint();
 	}
 };
 
@@ -504,12 +587,18 @@ public:
 // Optimize the constraints by performing offline variable substitution
 void Andersen::optimizeConstraints()
 {
+	errs() << "\n#constraints = " << constraints.size() << "\n";
 	// First, let's do HVN
+	// There is an additional assumption here that before HVN, we have not merged any two nodes. Might fix that in the future
 	HVNOptimizer hvn(constraints, nodeFactory);
 	hvn.run();
+	hvn.releaseMemory();
 
+	errs() << "#constraints = " << constraints.size() << "\n";
 	// Next, do HU
+	// There is an additional assumption here that before HU, the predecessor graph will have no cycle. Might fix that in the future
 	HUOptimizer hu(constraints, nodeFactory);
 	hu.run();
+	errs() << "#constraints = " << constraints.size() << "\n";
 }
 
