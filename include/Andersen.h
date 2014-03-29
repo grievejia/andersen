@@ -104,6 +104,8 @@ private:
 	// For debugging
 	void dumpConstraint(const AndersConstraint&) const;
 	void dumpConstraints() const;
+	void dumpConstraintsPlainVanilla() const;
+	void dumpPtsGraphPlainVanilla() const;
 public:
 	static char ID;
 

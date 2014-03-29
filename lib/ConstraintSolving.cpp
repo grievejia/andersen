@@ -255,7 +255,8 @@ void buildConstraintGraph(ConstraintGraph& cGraph, const std::vector<AndersConst
 		{
 			case AndersConstraint::ADDR_OF:
 			{
-				ptsGraph[dstTgt].insert(srcTgt);
+				// We don't want to replace src with srcTgt because, after all, the address of a variable is NOT the same as the address of another variable
+				ptsGraph[dstTgt].insert(c.getSrc());
 				break;
 			}
 			case AndersConstraint::LOAD:
@@ -302,6 +303,7 @@ void Andersen::solveConstraints()
 	while (!workList.isEmpty())
 	{
 		NodeIndex node = workList.dequeue();
+		//errs() << "Examining node " << node << "\n";
 
 		auto graphSucc = constraintGraph.getSuccessors(node);
 
@@ -316,8 +318,12 @@ void Andersen::solveConstraints()
 				{
 					NodeIndex tgtNode = edge.first;
 					unsigned offset = edge.second;
+					//errs() << "Examining load edge " << node << " -> " << tgtNode << ", offset = " << offset << "\n";
 					if (constraintGraph.insertCopyEdge(v, tgtNode, offset))
+					{
+						//errs() << "\tInsert copy edge " << v << " -> " << tgtNode << ", offset = " << offset << "\n";
 						workList.enqueue(v);
+					}
 				}
 
 				for (auto const& edge: graphSucc->storeEdges)
@@ -325,16 +331,21 @@ void Andersen::solveConstraints()
 					NodeIndex tgtNode = edge.first;
 					unsigned offset = edge.second;
 					if (constraintGraph.insertCopyEdge(tgtNode, v, offset))
+					{
+						//errs() << "\tInsert copy edge " << tgtNode << " -> " << v << ", offset = " << offset << "\n";
 						workList.enqueue(tgtNode);
+					}
 				}
 			}
-
+			
 			// Finally, it's time to propagate pts-to info along the copy edges
 			for (auto const& edge: graphSucc->copyEdges)
 			{
 				NodeIndex tgtNode = edge.first;
 				unsigned offset = edge.second;
 				AndersPtsSet& tgtPtsSet = ptsGraph[tgtNode];
+				// Here we need to re-compute ptsSet because the previous line may cause an map insertion, which will invalidate any existing map iterators
+				const AndersPtsSet& ptsSet = ptsGraph[node];
 				bool isChanged = false;
 				if (offset == 0)
 					isChanged = tgtPtsSet.unionWith(ptsSet);
@@ -347,7 +358,7 @@ void Andersen::solveConstraints()
 							isChanged |= tgtPtsSet.insert(v);
 							break;
 						}
-						assert(v + offset < nodeFactory.getNumNodes() && "Node index out of range!");
+						//assert(v + offset < nodeFactory.getNumNodes() && "Node index out of range!");
 						isChanged |= tgtPtsSet.insert(v + offset);
 					}
 				}

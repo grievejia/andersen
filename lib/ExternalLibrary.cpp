@@ -43,8 +43,8 @@ static const char* noopFuncs[] = {
 
 static const char* mallocFuncs[] = {
 	"malloc", "valloc", "calloc",
-	"Znwj", "ZnwjRKSt9nothrow_t", "Znwm", "ZnwmRKSt9nothrow_t", 
-	"Znaj", "ZnajRKSt9nothrow_t", "Znam", "ZnamRKSt9nothrow_t", 
+	"_Znwj", "_ZnwjRKSt9nothrow_t", "_Znwm", "_ZnwmRKSt9nothrow_t", 
+	"_Znaj", "_ZnajRKSt9nothrow_t", "_Znam", "_ZnamRKSt9nothrow_t", 
 	"strdup", "strndup",
 	"getenv",
 	"memalign", "posix_memalign",
@@ -92,7 +92,13 @@ static bool lookupName(const char* table[], const char* str)
 static unsigned traceAllocSize(const Instruction* inst, const StructAnalyzer& structAnalyzer)
 {
 	assert(inst != NULL);
-	const PointerType* pType = cast<PointerType>(inst->getType());
+	const PointerType* pType = dyn_cast<PointerType>(inst->getType());
+	if (pType == NULL)
+	{
+		// Must be something like posix_memalign
+		// Finding the alloc size of the dereference of its first argument is tricky. We're being lazy here...
+		return StructInfo::getMaxStructSize();
+	}
 	const Type* elemType = pType->getElementType();
 	
 	unsigned maxSize = 0;

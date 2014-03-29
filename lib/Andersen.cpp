@@ -22,11 +22,16 @@ bool Andersen::runOnModule(Module &M)
 	nodeFactory.setDataLayout(dataLayout);
 
 	collectConstraints(M);
+
 	//nodeFactory.dumpNodeInfo();
-	//dumpConstraints();
+	dumpConstraintsPlainVanilla();
+
 	optimizeConstraints();
-	
+
 	solveConstraints();
+
+	errs() << "\n";
+	dumpPtsGraphPlainVanilla();
 
 	return false;
 }
@@ -92,6 +97,30 @@ void Andersen::dumpConstraints() const
 	for (auto const& item: constraints)
 		dumpConstraint(item);
 	errs() << "----- End of Print -----\n";
+}
+
+void Andersen::dumpConstraintsPlainVanilla() const
+{
+	for (auto const& item: constraints)
+	{
+		errs() << item.getType() << " " << item.getDest() << " " << item.getSrc() << " " << item.getOffset() << "\n";
+	}
+}
+
+void Andersen::dumpPtsGraphPlainVanilla() const
+{
+	for (unsigned i = 0, e = nodeFactory.getNumNodes(); i < e; ++i)
+	{
+		NodeIndex rep = nodeFactory.getMergeTarget(i);
+		auto ptsItr = ptsGraph.find(rep);
+		if (ptsItr != ptsGraph.end())
+		{
+			errs() << i << " ";
+			for (auto v: ptsItr->second)
+				errs() << v << " ";
+			errs() << "\n";
+		}
+	}
 }
 
 char Andersen::ID = 0;

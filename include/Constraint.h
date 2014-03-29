@@ -17,10 +17,10 @@ class AndersConstraint {
 public:
 	enum ConstraintType 
 	{
+		ADDR_OF,
 		COPY,
 		LOAD,
 		STORE,
-		ADDR_OF,
 	};
 private:
 	ConstraintType type;

@@ -105,6 +105,7 @@ public:
 	// Node merge interfaces
 	void mergeNode(NodeIndex n0, NodeIndex n1);	// Merge n1 into n0
 	NodeIndex getMergeTarget(NodeIndex n);
+	NodeIndex getMergeTarget(NodeIndex n) const;
 
 	// Pointer arithmetic
 	bool isObjectNode(NodeIndex i) const
@@ -140,6 +141,7 @@ public:
 	// For debugging purpose
 	void dumpNode(NodeIndex) const;
 	void dumpNodeInfo() const;
+	void dumpRepInfo() const;
 };
 
 #endif

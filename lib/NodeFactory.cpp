@@ -227,6 +227,15 @@ NodeIndex AndersNodeFactory::getMergeTarget(NodeIndex n)
 	return ret;
 }
 
+NodeIndex AndersNodeFactory::getMergeTarget(NodeIndex n) const
+{
+	assert (n < nodes.size());
+	NodeIndex ret = nodes[n].mergeTarget;
+	while (ret != nodes[ret].mergeTarget)
+		ret = nodes[ret].mergeTarget;
+	return ret;
+}
+
 unsigned AndersNodeFactory::constGEPtoFieldNum(const llvm::ConstantExpr* expr) const
 {
 	assert(expr->getOpcode() == Instruction::GetElementPtr && "constGEPtoVariable receives a non-gep expr!");
@@ -309,5 +318,17 @@ void AndersNodeFactory::dumpNodeInfo() const
 	errs() << "\nVararg Map:\n";
 	for (auto const& mapping: varargMap)
 		errs() << mapping.first->getName() << "  -->>  [Node #" << mapping.second << "]\n";
+	errs() << "----- End of Print -----\n";
+}
+
+void AndersNodeFactory::dumpRepInfo() const
+{
+	errs() << "\n----- Print Node Merge Info -----\n";
+	for (NodeIndex i = 0, e = nodes.size(); i < e; ++i)
+	{
+		NodeIndex rep = getMergeTarget(i);
+		if (rep != i)
+			errs() << i << " -> " << rep << "\n";
+	}
 	errs() << "----- End of Print -----\n";
 }
