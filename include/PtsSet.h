@@ -57,12 +57,13 @@ public:
 		return bitvec.empty();
 	}
 
+	bool operator==(const AndersPtsSet& other) const
+	{
+		return bitvec == other.bitvec;
+	}
+
 	iterator begin() const { return bitvec.begin(); }
 	iterator end() const { return bitvec.end(); }
-	llvm::iterator_range<iterator> elements() const
-	{
-		return llvm::iterator_range<iterator>(begin(), end());
-	}
 };
 
 #endif

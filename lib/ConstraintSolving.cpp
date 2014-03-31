@@ -82,19 +82,14 @@ public:
 	bool isEmpty() const { return list.empty(); }
 };
 
-// The technique used here is described in "The Ant and the Grasshopper: Fast and Accurate Pointer Analysis for Millions of Lines of Code. In Programming Language Design and Implementation (PLDI), June 2007." It is known as the "HCD" (Hybrid Cycle Detection) algorithm. It is called a hybrid because it performs an offline analysis and uses its results during the solving (online) phase. This is just the offline portion; the results of this operation are stored in SDT and are later used in SolveContraints() and UniteNodes().
-class OfflineCycleDetector
+// A base class that offers the functionality of detecting SCC in a graph
+class CycleDetector
 {
-private:
-	std::vector<AndersConstraint>& constraints;
+protected:
 	AndersNodeFactory& nodeFactory;
+	// Number of nodes
+	unsigned numNodes;
 
-	// The offline constraint graph
-	DenseMap<NodeIndex, SparseBitVector<>> offlineGraph;
-	// If a mapping <p, q> is in this map, it means that *p and q are in the same cycle in the offline constraint graph, and anything that p points to during the online constraint solving phase can be immediately collapse with q
-	DenseMap<NodeIndex, NodeIndex> collapseMap;
-	// Holds the pairs of VAR nodes that we are going to merge together
-	DenseMap<NodeIndex, NodeIndex> mergeMap;
 	// The SCC stack
 	std::stack<unsigned> sccStack;
 	// Map from NodeIndex to DFS number, and negative DFS number means never visited
@@ -103,6 +98,75 @@ private:
 	std::deque<bool> inComponent;
 	// DFS timestamp
 	int timestamp;
+
+	// Return true if node has successors in the graph
+	virtual bool hasSuccessor(NodeIndex node) = 0;
+	// Return the successors of node
+	virtual const SparseBitVector<>& getSuccessors(NodeIndex node) = 0;
+	// Sometimes we need to adjust the node index before we moving on traversing that node
+	virtual NodeIndex getRep(NodeIndex node) = 0;
+	// The function specifying how to process a cycle
+	virtual void processCycle(NodeIndex node, int myTimeStamp) = 0;
+
+	// visiting each node and perform some task
+	void visit(NodeIndex node)
+	{
+		assert(node < numNodes && "Visiting a non-existent node!");
+		int myTimeStamp = timestamp++;
+		dfsNum[node] = myTimeStamp;
+
+		// Traverse succecessor edges
+		if (hasSuccessor(node))
+		{
+			auto edges = getSuccessors(node);
+			for (auto const& succ: edges)
+			{
+				NodeIndex succRep = getRep(succ);
+				if (dfsNum[succRep] < 0)
+					visit(succRep);
+
+				if (!inComponent[succRep] && dfsNum[node] > dfsNum[succRep])
+					dfsNum[node] = dfsNum[succRep];
+			}
+		}
+
+		// See if we have any cycle detected
+		if (myTimeStamp != dfsNum[node])
+		{
+			// If not, push the sccStack and go on
+			sccStack.push(node);
+			return;
+		}
+
+		// Cycle detected
+		inComponent[node] = true;
+		processCycle(node, myTimeStamp);
+	}
+
+	void releaseSCCMemory()
+	{
+		dfsNum.clear();
+		inComponent.clear();
+	}
+public:
+	CycleDetector(AndersNodeFactory& n, unsigned nn): nodeFactory(n), numNodes(nn), dfsNum(numNodes), inComponent(numNodes), timestamp(0) {}
+
+	// The public interface of running the detector
+	virtual void run() = 0;
+};
+
+// The technique used here is described in "The Ant and the Grasshopper: Fast and Accurate Pointer Analysis for Millions of Lines of Code. In Programming Language Design and Implementation (PLDI), June 2007." It is known as the "HCD" (Hybrid Cycle Detection) algorithm. It is called a hybrid because it performs an offline analysis and uses its results during the solving (online) phase. This is just the offline portion
+class OfflineCycleDetector: public CycleDetector
+{
+private:
+	std::vector<AndersConstraint>& constraints;
+
+	// The offline constraint graph
+	DenseMap<NodeIndex, SparseBitVector<>> offlineGraph;
+	// If a mapping <p, q> is in this map, it means that *p and q are in the same cycle in the offline constraint graph, and anything that p points to during the online constraint solving phase can be immediately collapse with q
+	DenseMap<NodeIndex, NodeIndex> collapseMap;
+	// Holds the pairs of VAR nodes that we are going to merge together
+	DenseMap<NodeIndex, NodeIndex> mergeMap;
 
 	// Return the node index of the "ref node" (used to represent *n) of n. 
 	// We won't actually create that ref node. We cannot use the NodeIndex of that refNode to index into nodeFactory
@@ -143,37 +207,26 @@ private:
 		}
 	}
 
-	void visit(NodeIndex node)
+	bool hasSuccessor(NodeIndex node) override
 	{
-		assert(node < nodeFactory.getNumNodes() * 2 && "Visiting a non-existent node!");
-		int myTimeStamp = timestamp++;
-		dfsNum[node] = myTimeStamp;
+		return offlineGraph.count(node);
+	}
+	
+	const SparseBitVector<>& getSuccessors(NodeIndex node) override
+	{
+		return offlineGraph[node];
+	}
+	
+	NodeIndex getRep(NodeIndex succ) override
+	{
+		if (succ > nodeFactory.getNumNodes())
+			return getRefNodeIndex(succ % nodeFactory.getNumNodes());
+		else
+			return nodeFactory.getMergeTarget(succ);
+	}
 
-		// Traverse succecessor edges
-		auto succItr = offlineGraph.find(node);
-		if (succItr != offlineGraph.end())
-		{
-			const SparseBitVector<>& edges = succItr->second;
-			for (auto const& succ: edges)
-			{
-				NodeIndex succRep = nodeFactory.getMergeTarget(succ);
-				if (dfsNum[succRep] < 0)
-					visit(succRep);
-
-				if (!inComponent[succRep] && dfsNum[node] > dfsNum[succRep])
-					dfsNum[node] = dfsNum[succRep];
-			}
-		}
-
-		// See if we have any cycle detected
-		if (myTimeStamp != dfsNum[node])
-		{
-			// If not, push the sccStack and go on
-			sccStack.push(node);
-			return;
-		}
-
-		inComponent[node] = true;
+	void processCycle(NodeIndex node, int myTimeStamp) override
+	{
 		SparseBitVector<> scc;
 		while (!sccStack.empty())
 		{
@@ -203,12 +256,12 @@ private:
 				// We don't merge the nodes immediately to avoid affecting the DFS
 				mergeMap[cycleNode] = node;
 		}
-
 	}
-public:
-	OfflineCycleDetector(std::vector<AndersConstraint>& c, AndersNodeFactory& n): constraints(c), nodeFactory(n), dfsNum(nodeFactory.getNumNodes() * 2), inComponent(nodeFactory.getNumNodes() * 2), timestamp(0) {}
 
-	void run()
+public:
+	OfflineCycleDetector(std::vector<AndersConstraint>& c, AndersNodeFactory& n): CycleDetector(n, n.getNumNodes() * 2), constraints(c) {}
+
+	void run() override
 	{
 		// Build the offline constraint graph first
 		buildOfflineConstraintGraph();
@@ -229,9 +282,8 @@ public:
 
 		// We don't need these structures any more. The only thing we keep should be those info that are necessary to answer collapsing target queries
 		offlineGraph.clear();
-		dfsNum.clear();
-		inComponent.clear();
 		mergeMap.clear();
+		releaseSCCMemory();
 	}
 
 	// Return InvalidIndex if no collapse target found
@@ -278,8 +330,25 @@ void buildConstraintGraph(ConstraintGraph& cGraph, const std::vector<AndersConst
 	}
 }
 
+
 }	// end of anonymous namespace
 
+/// solveConstraints - This stage iteratively processes the constraints list
+/// propagating constraints (adding edges to the Nodes in the points-to graph)
+/// until a fixed point is reached.
+///
+/// We use a variant of the technique called "Lazy Cycle Detection", which is
+/// described in "The Ant and the Grasshopper: Fast and Accurate Pointer
+/// Analysis for Millions of Lines of Code. In Programming Language Design and
+/// Implementation (PLDI), June 2007."
+/// The paper describes performing cycle detection one node at a time, which can
+/// be expensive if there are no cycles, but there are long chains of nodes that
+/// it heuristically believes are cycles (because it will DFS from each node
+/// without state from previous nodes).
+/// Instead, we use the heuristic to build a worklist of nodes to check, then
+/// cycle detect them all at the same time to do this more cheaply.  This
+/// catches cycles slightly later than the original technique did, but does it
+/// make significantly cheaper.
 void Andersen::solveConstraints()
 {
 	// We'll do offline HCD first
@@ -292,88 +361,127 @@ void Andersen::solveConstraints()
 	// The constraint vector is useless now
 	constraints.clear();
 
-	AndersWorkList workList;
+	// We switch between two work lists instead of relying on only one work list
+	AndersWorkList workList1, workList2;
+	// The "current" and the "next" work list
+	AndersWorkList *currWorkList = &workList1, *nextWorkList = &workList2;
+	// The set of nodes that LCD believes might be on a cycle
+	DenseSet<NodeIndex> cycleCandidates;
+	// The set of edges that LCD believes not on a cycle
+	DenseSet<std::pair<NodeIndex, NodeIndex>> checkedEdges;
+
 	// Scan the node list, add it to work list if the node a representative and can contribute to the calculation right now.
 	for (unsigned i = 0, e = nodeFactory.getNumNodes(); i < e; ++i)
 	{
 		if (nodeFactory.getMergeTarget(i) == i && ptsGraph.count(i) && constraintGraph.getSuccessors(i) != nullptr)
-			workList.enqueue(i);
+			currWorkList->enqueue(i);
 	}
 
-	while (!workList.isEmpty())
+	while (!currWorkList->isEmpty())
 	{
-		NodeIndex node = workList.dequeue();
-		//errs() << "Examining node " << node << "\n";
+		// Iteration begins
 
-		auto graphSucc = constraintGraph.getSuccessors(node);
-
-		auto ptsItr = ptsGraph.find(node);
-		if (ptsItr != ptsGraph.end() && graphSucc != nullptr)
+		// First we've got to check if there is any cycle candidates in the last iteration. If there is, detect and collapse cycle
+		if (!cycleCandidates.empty())
 		{
-			// Check indirect constraints and add copy edge to the constraint graph if necessary
-			const AndersPtsSet& ptsSet = ptsItr->second;
-			for (auto v: ptsSet)
-			{
-				for (auto const& edge: graphSucc->loadEdges)
-				{
-					NodeIndex tgtNode = edge.first;
-					unsigned offset = edge.second;
-					//errs() << "Examining load edge " << node << " -> " << tgtNode << ", offset = " << offset << "\n";
-					if (constraintGraph.insertCopyEdge(v, tgtNode, offset))
-					{
-						//errs() << "\tInsert copy edge " << v << " -> " << tgtNode << ", offset = " << offset << "\n";
-						workList.enqueue(v);
-					}
-				}
+			// Once again, since there are too many states to keep track of when detecting cycles, we use another class to do all the work
+			//OnlineCycleDetector cycleDetector(nodeFactory, constraintGraph, cycleCandidates);
+			//cycleDetector.run();
+			//cycleCandidates.clear();
+		}
 
-				for (auto const& edge: graphSucc->storeEdges)
-				{
-					NodeIndex tgtNode = edge.first;
-					unsigned offset = edge.second;
-					if (constraintGraph.insertCopyEdge(tgtNode, v, offset))
-					{
-						//errs() << "\tInsert copy edge " << tgtNode << " -> " << v << ", offset = " << offset << "\n";
-						workList.enqueue(tgtNode);
-					}
-				}
-			}
-			
-			// Finally, it's time to propagate pts-to info along the copy edges
-			for (auto const& edge: graphSucc->copyEdges)
+		while (!currWorkList->isEmpty())
+		{
+			NodeIndex node = currWorkList->dequeue();
+			node = nodeFactory.getMergeTarget(node);
+			//errs() << "Examining node " << node << "\n";
+
+			auto graphSucc = constraintGraph.getSuccessors(node);
+
+			auto ptsItr = ptsGraph.find(node);
+			if (ptsItr != ptsGraph.end() && graphSucc != nullptr)
 			{
-				NodeIndex tgtNode = edge.first;
-				unsigned offset = edge.second;
-				AndersPtsSet& tgtPtsSet = ptsGraph[tgtNode];
-				// Here we need to re-compute ptsSet because the previous line may cause an map insertion, which will invalidate any existing map iterators
-				const AndersPtsSet& ptsSet = ptsGraph[node];
-				bool isChanged = false;
-				if (offset == 0)
-					isChanged = tgtPtsSet.unionWith(ptsSet);
-				else
+				// Check indirect constraints and add copy edge to the constraint graph if necessary
+				const AndersPtsSet& ptsSet = ptsItr->second;
+				for (auto v: ptsSet)
 				{
-					for (auto v: ptsSet)
+					for (auto const& edge: graphSucc->loadEdges)
 					{
-						if (v == nodeFactory.getUniversalObjNode())
+						NodeIndex tgtNode = edge.first;
+						tgtNode = nodeFactory.getMergeTarget(tgtNode);
+						unsigned offset = edge.second;
+						//errs() << "Examining load edge " << node << " -> " << tgtNode << ", offset = " << offset << "\n";
+						if (constraintGraph.insertCopyEdge(v, tgtNode, offset))
 						{
-							isChanged |= tgtPtsSet.insert(v);
-							break;
+							//errs() << "\tInsert copy edge " << v << " -> " << tgtNode << ", offset = " << offset << "\n";
+							nextWorkList->enqueue(v);
 						}
-						//assert(v + offset < nodeFactory.getNumNodes() && "Node index out of range!");
-						isChanged |= tgtPtsSet.insert(v + offset);
+					}
+
+					for (auto const& edge: graphSucc->storeEdges)
+					{
+						NodeIndex tgtNode = edge.first;
+						tgtNode = nodeFactory.getMergeTarget(tgtNode);
+						unsigned offset = edge.second;
+						if (constraintGraph.insertCopyEdge(tgtNode, v, offset))
+						{
+							//errs() << "\tInsert copy edge " << tgtNode << " -> " << v << ", offset = " << offset << "\n";
+							nextWorkList->enqueue(tgtNode);
+						}
 					}
 				}
-
-				if (isChanged)
+				
+				// Finally, it's time to propagate pts-to info along the copy edges
+				for (auto const& edge: graphSucc->copyEdges)
 				{
-					// If tgtPtsSet gets the universal object, just keep that object and discard everything else
-					if (tgtPtsSet.has(nodeFactory.getUniversalObjNode()))
+					NodeIndex tgtNode = edge.first;
+					tgtNode = nodeFactory.getMergeTarget(tgtNode);
+					unsigned offset = edge.second;
+					AndersPtsSet& tgtPtsSet = ptsGraph[tgtNode];
+					// Here we need to re-compute ptsSet because the previous line may cause an map insertion, which will invalidate any existing map iterators
+					const AndersPtsSet& ptsSet = ptsGraph[node];
+					bool isChanged = false;
+					if (offset == 0)
+						isChanged = tgtPtsSet.unionWith(ptsSet);
+					else
 					{
-						tgtPtsSet.clear();
-						tgtPtsSet.insert(nodeFactory.getUniversalObjNode());
+						for (auto v: ptsSet)
+						{
+							if (v == nodeFactory.getUniversalObjNode())
+							{
+								isChanged |= tgtPtsSet.insert(v);
+								break;
+							}
+							//assert(v + offset < nodeFactory.getNumNodes() && "Node index out of range!");
+							isChanged |= tgtPtsSet.insert(v + offset);
+						}
 					}
-					workList.enqueue(tgtNode);
+
+					if (isChanged)
+					{
+						// If tgtPtsSet gets the universal object, just keep that object and discard everything else
+						if (tgtPtsSet.has(nodeFactory.getUniversalObjNode()))
+						{
+							tgtPtsSet.clear();
+							tgtPtsSet.insert(nodeFactory.getUniversalObjNode());
+						}
+						nextWorkList->enqueue(tgtNode);
+					}
+					else
+					{
+						// This is where we do lazy cycle detection.
+						// If this is a cycle candidate (equal points-to sets and this particular edge has not been cycle-checked previously), add to the list to check for cycles on the next iteration
+						auto edgePair = std::make_pair(node, tgtNode);
+						if (!checkedEdges.count(edgePair) && ptsSet == tgtPtsSet)
+						{
+							checkedEdges.insert(edgePair);
+							cycleCandidates.insert(tgtNode);
+						}
+					}
 				}
 			}
 		}
+		// Swap the current and the next worklist
+		std::swap(currWorkList, nextWorkList);
 	}
 }
