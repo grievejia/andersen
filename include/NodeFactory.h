@@ -1,8 +1,6 @@
 #ifndef ANDERSEN_NODE_FACTORY_H
 #define ANDERSEN_NODE_FACTORY_H
 
-#include "StructAnalyzer.h"
-
 #include "llvm/IR/Value.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/DataLayout.h"
@@ -40,15 +38,11 @@ public:
 class AndersNodeFactory
 {
 public:
-	typedef llvm::DenseMap<std::pair<NodeIndex, unsigned>, NodeIndex> GepMap;
-
 	// The largest unsigned int is reserved for invalid index
 	static const unsigned InvalidIndex;
 private:
 	// The datalayout info
 	const llvm::DataLayout* dataLayout;
-	// The struct info
-	const StructAnalyzer* structAnalyzer;
 
 	// The set of nodes 
 	std::vector<AndersNode> nodes;
@@ -76,17 +70,10 @@ private:
 	/// take variable arguments.
 	llvm::DenseMap<const llvm::Function*, NodeIndex> varargMap;
 
-	// gepMap - This map maintains the gep-relations across value nodes. The mappings are of the form <base-ptr, offset> -> gep-ptr, where base-ptr is the ValueNodeIndex for nodes that created out of llvm SSA variables while gep-ptr is the ValueNodeIndex for nodes that are created out of GEP instructions
-	GepMap gepMap;
-
-	// Helper functions to do GEP translation
-	unsigned offsetToFieldNum(const llvm::Value* ptr, unsigned offset) const;
-	unsigned constGEPtoFieldNum(const llvm::ConstantExpr* expr) const;
 public:
 	AndersNodeFactory();
 
 	void setDataLayout(const llvm::DataLayout* d) { dataLayout = d; }
-	void setStructAnalyzer(const StructAnalyzer* s) { structAnalyzer = s; }
 
 	// Factory methods
 	NodeIndex createValueNode(const llvm::Value* val = NULL);
@@ -132,11 +119,6 @@ public:
 
 	// Size getters
 	unsigned getNumNodes() const { return nodes.size(); }
-
-	// GepMap interfaces
-	GepMap::const_iterator gepmap_begin() const { return gepMap.begin(); }
-	GepMap::const_iterator gepmap_end() const { return gepMap.end(); }
-	void clearGepMap() { gepMap.clear(); }
 
 	// For debugging purpose
 	void dumpNode(NodeIndex) const;

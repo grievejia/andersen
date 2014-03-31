@@ -98,30 +98,21 @@ protected:
 				case AndersConstraint::LOAD:
 				{
 					// dest = *src edge
-					if (c.getOffset() == 0)
-						predGraph[dstTgt].set(getRefNodeIndex(srcTgt));
-					else
-						indirectNodes.insert(dstTgt);
+					predGraph[dstTgt].set(getRefNodeIndex(srcTgt));
 					break;
 				}
 				case AndersConstraint::STORE:
 				{
 					// *dest = src edge
-					if (c.getOffset() == 0)
-						predGraph[getRefNodeIndex(dstTgt)].set(srcTgt);
+					predGraph[getRefNodeIndex(dstTgt)].set(srcTgt);
 					break;
 				}
 				case AndersConstraint::COPY:
 				{
-					if (c.getOffset() == 0)
-					{
-						// Dest = Src edge
-						predGraph[dstTgt].set(srcTgt);
-						// *Dest = *Src edge
-						predGraph[getRefNodeIndex(dstTgt)].set(getRefNodeIndex(srcTgt));
-					}
-					else
-						indirectNodes.insert(dstTgt);
+					// Dest = Src edge
+					predGraph[dstTgt].set(srcTgt);
+					// *Dest = *Src edge
+					predGraph[getRefNodeIndex(dstTgt)].set(getRefNodeIndex(srcTgt));
 					break;
 				}
 			}
@@ -286,8 +277,8 @@ protected:
 		std::vector<AndersConstraint> newConstraints;
 		for (auto const& c: constraints)
 		{
-			// First, if the lhs or rhs of c has label 0 (non-ptr), ignore this constraint
-			if (peLabel[c.getDest()] == 0 || peLabel[c.getSrc()] == 0)
+			// First, if the lhs has label 0 (non-ptr), ignore this constraint
+			if (peLabel[c.getDest()] == 0)
 				continue;
 
 			// Change the lhs to its mergeTarget
@@ -305,19 +296,22 @@ protected:
 				}
 				case AndersConstraint::LOAD:
 				{
+					// If the src is a non-ptr, ignore this constraint
+					if (peLabel[srcTgt] == 0)
+						break;
 					// If the rhs is equivalent to some ADR node, then we are able to replace the load with a copy
 					NodeIndex srcTgtTgt = revLabelMap[peLabel[srcTgt]];
 					if (srcTgtTgt > nodeFactory.getNumNodes())
 					{
 						srcTgtTgt %= nodeFactory.getNumNodes();
 						//errs() << "REPLACE " << srcTgt << " with &" << srcTgtTgt << "\n";
-						if (srcTgtTgt != destTgt || c.getOffset() != 0)
-							newConstraints.emplace_back(AndersConstraint::COPY, destTgt, srcTgtTgt, c.getOffset());
+						if (srcTgtTgt != destTgt)
+							newConstraints.emplace_back(AndersConstraint::COPY, destTgt, srcTgtTgt);
 					}
 					else
 					{
 						assert(srcTgtTgt == srcTgt);
-						newConstraints.emplace_back(AndersConstraint::LOAD, destTgt, srcTgt, c.getOffset());
+						newConstraints.emplace_back(AndersConstraint::LOAD, destTgt, srcTgt);
 					}
 
 					break;
@@ -330,13 +324,13 @@ protected:
 					{
 						destTgtTgt %= nodeFactory.getNumNodes();
 						//errs() << "REPLACE " << destTgt << " with &" << destTgtTgt << "\n";
-						if (destTgtTgt != srcTgt || c.getOffset() != 0)
-							newConstraints.emplace_back(AndersConstraint::COPY, destTgtTgt, srcTgt, c.getOffset());
+						if (destTgtTgt != srcTgt)
+							newConstraints.emplace_back(AndersConstraint::COPY, destTgtTgt, srcTgt);
 					}
 					else
 					{
 						assert(destTgtTgt == destTgt);
-						newConstraints.emplace_back(AndersConstraint::STORE, destTgt, srcTgt, c.getOffset());
+						newConstraints.emplace_back(AndersConstraint::STORE, destTgt, srcTgt);
 					}
 
 					break;
@@ -344,12 +338,16 @@ protected:
 				case AndersConstraint::COPY:
 				{
 					// Remove useless constraint "A=A"
-					if (destTgt == srcTgt && c.getOffset() == 0)
+					if (destTgt == srcTgt)
+						break;
+
+					// If the src is a non-ptr, ignore this constraint
+					if (peLabel[srcTgt] == 0)
 						break;
 
 					// If the rhs is equivalent to some ADR node, then we are able to replace the copy with an addr_of
 					NodeIndex srcTgtTgt = revLabelMap[peLabel[srcTgt]];
-					if (srcTgtTgt > nodeFactory.getNumNodes() && c.getOffset() == 0)
+					if (srcTgtTgt > nodeFactory.getNumNodes())
 					{
 						srcTgtTgt %= nodeFactory.getNumNodes();
 						//errs() << "REPLACE " << srcTgt << " with &" << srcTgtTgt << "\n";
@@ -357,7 +355,7 @@ protected:
 					}
 					else
 					{
-						newConstraints.emplace_back(AndersConstraint::COPY, destTgt, srcTgt, c.getOffset());
+						newConstraints.emplace_back(AndersConstraint::COPY, destTgt, srcTgt);
 					}
 
 					break;

@@ -47,7 +47,6 @@
 
 #include "Constraint.h"
 #include "NodeFactory.h"
-#include "StructAnalyzer.h"
 #include "PtsSet.h"
 
 #include "llvm/Pass.h"
@@ -55,14 +54,12 @@
 #include "llvm/IR/CallSite.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/DenseSet.h"
-#include "llvm/Target/TargetLibraryInfo.h"
 
 #include <vector>
 
 class Andersen: public llvm::ModulePass
 {
 private:
-	llvm::TargetLibraryInfo* tli;
 	const llvm::DataLayout* dataLayout;
 
 	// Constants that will become useful
@@ -73,8 +70,6 @@ private:
 
 	// A factory object that knows how to manage AndersNodes
 	AndersNodeFactory nodeFactory;
-	// A preliminary pass that collects info on structs
-	StructAnalyzer structAnalyzer;
 
 	/// Constraints - This vector contains a list of all of the constraints
 	/// identified by the program.
@@ -92,7 +87,6 @@ private:
 	// Helper functions for constraint collection
 	void collectConstraintsForGlobals(llvm::Module&);
 	void collectConstraintsForInstruction(const llvm::Instruction*);
-	void processStruct(const llvm::Value*, const llvm::StructType*);
 	void addGlobalInitializerConstraints(NodeIndex, const llvm::Constant*);
 	void addConstraintForCall(llvm::ImmutableCallSite cs);
 	bool addConstraintForExternalLibrary(llvm::ImmutableCallSite cs, const llvm::Function* f);

@@ -89,59 +89,6 @@ static bool lookupName(const char* table[], const char* str)
 	return false;
 }
 
-static unsigned traceAllocSize(const Instruction* inst, const StructAnalyzer& structAnalyzer)
-{
-	assert(inst != NULL);
-	const PointerType* pType = dyn_cast<PointerType>(inst->getType());
-	if (pType == NULL)
-	{
-		// Must be something like posix_memalign
-		// Finding the alloc size of the dereference of its first argument is tricky. We're being lazy here...
-		return StructInfo::getMaxStructSize();
-	}
-	const Type* elemType = pType->getElementType();
-	
-	unsigned maxSize = 0;
-	while (const ArrayType* arrayType = dyn_cast<ArrayType>(elemType))
-		elemType = arrayType->getElementType();
-	if (const StructType* stType = dyn_cast<StructType>(elemType))
-	{
-		const StructInfo* stInfo = structAnalyzer.getStructInfo(stType);
-		assert(stInfo != NULL && "structInfoMap should have info for all structs!");
-		maxSize = stInfo->getExpandedSize();
-	}
-	
-	// Check all the users of inst
-	for (auto const& useInst: inst->uses())
-	{
-		CastInst* castInst = dyn_cast<CastInst>(useInst);
-		if (castInst == NULL)
-			continue;
-		//Only check casts to other ptr types.
-		const PointerType* castType = dyn_cast<PointerType>(castInst->getType());
-		if (castType == NULL)
-			continue;
-		
-		const Type* elemType = castType->getElementType();
-		while (const ArrayType* arrayType = dyn_cast<ArrayType>(elemType))
-			elemType = arrayType->getElementType();
-			
-		if (const StructType* stType = dyn_cast<StructType>(elemType))
-		{
-			const StructInfo* stInfo = structAnalyzer.getStructInfo(stType);
-			assert(stInfo != NULL && "structInfoMap should have info for all structs!");
-			if (stInfo->getExpandedSize() > maxSize)
-				maxSize = stInfo->getExpandedSize();
-		}
-	}
-	
-	// If the allocation is of non-struct type and we can't find any casts, assume that it may be cast to the largest struct later on.
-	if (maxSize == 0)
-		return StructInfo::getMaxStructSize();
-	else
-		return maxSize;
-}
-
 // This function identifies if the external callsite is a library function call, and add constraint correspondingly
 // If this is a call to a "known" function, add the constraints and return true. If this is a call to an unknown function, return false.
 bool Andersen::addConstraintForExternalLibrary(ImmutableCallSite cs, const Function* f)
@@ -157,21 +104,15 @@ bool Andersen::addConstraintForExternalLibrary(ImmutableCallSite cs, const Funct
 	bool isReallocLike = lookupName(reallocFuncs, f->getName().data());
 
 	// Library calls that might allocate memory.
-	// The complicated issue here is that if the allocation is of struct type, then we have to find the size of that struct, which is often not obvious
 	if (lookupName(mallocFuncs, f->getName().data()) || (isReallocLike && !isa<ConstantPointerNull>(cs.getArgument(0))))
 	{
 		const Instruction* inst = cs.getInstruction();
-		unsigned mallocSize = traceAllocSize(inst, structAnalyzer);
 
-		// Create the first heap node
+		// Create the obj node
 		NodeIndex objIndex = nodeFactory.createObjectNode(inst);
-		// Create the rest heap nodes
-		for (unsigned i = 1; i < mallocSize; ++i)
-			nodeFactory.createObjectNode();
 
 		// Get the pointer node
 		NodeIndex ptrIndex = nodeFactory.getValueNodeFor(inst);
-
 		if (ptrIndex == AndersNodeFactory::InvalidIndex)
 		{
 			// Must be something like posix_memalign()
@@ -215,30 +156,14 @@ bool Andersen::addConstraintForExternalLibrary(ImmutableCallSite cs, const Funct
 
 	if (lookupName(memcpyFuncs, f->getName().data()))
 	{
-		// This is the most nasty case we can get, since if arg0 and arg1 point to structs of different type, then it is really difficult to make the analysis sound
 		NodeIndex arg0Index = nodeFactory.getValueNodeFor(cs.getArgument(0));
 		assert(arg0Index != AndersNodeFactory::InvalidIndex && "Failed to find arg0 node");
 		NodeIndex arg1Index = nodeFactory.getValueNodeFor(cs.getArgument(1));
 		assert(arg1Index != AndersNodeFactory::InvalidIndex && "Failed to find arg1 node");	
 
-		// We need to find out how many fields to copy
-		const Value* objVal = GetUnderlyingObject(cs.getArgument(1), dataLayout, 0);
-		unsigned size = 1;
-		if (objVal->getType()->isStructTy())
-		{
-			const StructType* stType = cast<StructType>(objVal->getType());
-			const StructInfo* stInfo = structAnalyzer.getStructInfo(stType);
-			assert(stInfo != NULL && "structInfoMap should have info for all structs!");
-			size = stInfo->getExpandedSize();
-		}
-
-		// Copy the fields
-		for (unsigned i = 0; i < size; ++i)
-		{
-			NodeIndex tempIndex = nodeFactory.createValueNode();
-			constraints.emplace_back(AndersConstraint::LOAD, tempIndex, arg1Index, i);
-			constraints.emplace_back(AndersConstraint::STORE, arg1Index, tempIndex, i);
-		}
+		NodeIndex tempIndex = nodeFactory.createValueNode();
+		constraints.emplace_back(AndersConstraint::LOAD, tempIndex, arg1Index);
+		constraints.emplace_back(AndersConstraint::STORE, arg1Index, tempIndex);
 
 		// Don't forget the return value
 		NodeIndex retIndex = nodeFactory.getValueNodeFor(cs.getInstruction());

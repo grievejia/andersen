@@ -10,14 +10,12 @@ const unsigned Andersen::CallFirstArgPos = 2;
 
 void Andersen::getAnalysisUsage(AnalysisUsage &AU) const
 {
-	AU.addRequired<TargetLibraryInfo>();
 	AU.addRequired<DataLayoutPass>();
 	AU.setPreservesAll();
 }
 
 bool Andersen::runOnModule(Module &M)
 {
-	tli = &getAnalysis<TargetLibraryInfo>();
 	dataLayout = &(getAnalysis<DataLayoutPass>().getDataLayout());
 	nodeFactory.setDataLayout(dataLayout);
 
@@ -44,7 +42,6 @@ void Andersen::dumpConstraint(const AndersConstraint& item) const
 {
 	NodeIndex dest = item.getDest();
 	NodeIndex src = item.getSrc();
-	unsigned offset = item.getOffset();
 
 	switch (item.getType())
 	{
@@ -53,8 +50,6 @@ void Andersen::dumpConstraint(const AndersConstraint& item) const
 			nodeFactory.dumpNode(dest);
 			errs() << " = ";
 			nodeFactory.dumpNode(src);
-			if (offset > 0)
-				errs() << " + " << offset;
 			break;
 		}
 		case AndersConstraint::LOAD:
@@ -62,10 +57,6 @@ void Andersen::dumpConstraint(const AndersConstraint& item) const
 			nodeFactory.dumpNode(dest);
 			errs() << " = *(";
 			nodeFactory.dumpNode(src);
-			if (offset > 0)
-				errs() << " + " << offset << ")";
-			else
-				errs() << ")";
 			break;
 		}
 		case AndersConstraint::STORE:
@@ -74,10 +65,6 @@ void Andersen::dumpConstraint(const AndersConstraint& item) const
 			nodeFactory.dumpNode(dest);
 			errs() << " = (";
 			nodeFactory.dumpNode(src);
-			if (offset > 0)
-				errs() << " + " << offset << ")";
-			else
-				errs() << ")";
 			break;
 		}
 		case AndersConstraint::ADDR_OF:
@@ -103,7 +90,7 @@ void Andersen::dumpConstraintsPlainVanilla() const
 {
 	for (auto const& item: constraints)
 	{
-		errs() << item.getType() << " " << item.getDest() << " " << item.getSrc() << " " << item.getOffset() << "\n";
+		errs() << item.getType() << " " << item.getDest() << " " << item.getSrc() << " 0\n";
 	}
 }
 

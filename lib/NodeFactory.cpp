@@ -103,29 +103,9 @@ NodeIndex AndersNodeFactory::getValueNodeForConstant(const llvm::Constant* c)
     {
 		switch (ce->getOpcode())
 		{
+			// Pointer to any field within a struct is treated as a pointer to the first field
 			case Instruction::GetElementPtr:
-			{
-				NodeIndex baseNode = getValueNodeForConstant(ce->getOperand(0));
-				assert(baseNode != InvalidIndex && "missing base val node for gep");
-
-				if (baseNode == getNullObjectNode() || baseNode == getUniversalObjNode())
-					return baseNode;
-
-				unsigned fieldNum = constGEPtoFieldNum(ce);
-				if (fieldNum == 0)
-					return baseNode;
-
-				auto mapKey = std::make_pair(baseNode, fieldNum);
-				auto itr = gepMap.find(mapKey);
-				if (itr == gepMap.end())
-				{
-					NodeIndex gepIndex = createValueNode(ce);
-					gepMap.insert(std::make_pair(mapKey, gepIndex));
-					return gepIndex;
-				}
-				else
-					return itr->second;
-			}
+				return getValueNodeFor(c->getOperand(0));
 			case Instruction::IntToPtr:
 			case Instruction::PtrToInt:
 				return getUniversalPtrNode();
@@ -166,15 +146,9 @@ NodeIndex AndersNodeFactory::getObjectNodeForConstant(const llvm::Constant* c)
 	{
 		switch (ce->getOpcode())
 		{
+			// Pointer to any field within a struct is treated as a pointer to the first field
 			case Instruction::GetElementPtr:
-			{
-				NodeIndex baseNode = getObjectNodeForConstant(ce->getOperand(0));
-				assert(baseNode != InvalidIndex && "missing base obj node for gep");
-				if (baseNode == getNullObjectNode() || baseNode == getUniversalObjNode())
-					return baseNode;
-
-				return getOffsetObjectNode(baseNode, constGEPtoFieldNum(ce));
-			}
+				getObjectNodeForConstant(ce->getOperand(0));
 			case Instruction::IntToPtr:
 			case Instruction::PtrToInt:
 				return getUniversalObjNode();
@@ -233,53 +207,6 @@ NodeIndex AndersNodeFactory::getMergeTarget(NodeIndex n) const
 	NodeIndex ret = nodes[n].mergeTarget;
 	while (ret != nodes[ret].mergeTarget)
 		ret = nodes[ret].mergeTarget;
-	return ret;
-}
-
-unsigned AndersNodeFactory::constGEPtoFieldNum(const llvm::ConstantExpr* expr) const
-{
-	assert(expr->getOpcode() == Instruction::GetElementPtr && "constGEPtoVariable receives a non-gep expr!");
-
-	unsigned offset = getGEPOffset(expr, dataLayout);
-	return offsetToFieldNum(GetUnderlyingObject(expr, dataLayout, 0), offset);
-}
-
-unsigned AndersNodeFactory::offsetToFieldNum(const Value* ptr, unsigned offset) const
-{
-	assert(ptr->getType()->isPointerTy() && "Passing a non-ptr to offsetToFieldNum!");
-	assert(dataLayout != nullptr && "DataLayout is NULL when calling offsetToFieldNum!");
-
-	Type* trueElemType = cast<PointerType>(ptr->getType())->getElementType();
-	unsigned ret = 0;
-	while (offset > 0)
-	{
-		// Collapse array type
-		while(const ArrayType *arrayType= dyn_cast<ArrayType>(trueElemType))
-			trueElemType = arrayType->getElementType();
-
-		//errs() << "trueElemType = "; trueElemType->dump(); errs() << "\n";
-		offset %= dataLayout->getTypeAllocSize(trueElemType);
-		if (trueElemType->isStructTy())
-		{
-			StructType* stType = cast<StructType>(trueElemType);
-			const StructLayout* stLayout = dataLayout->getStructLayout(stType);
-			unsigned idx = stLayout->getElementContainingOffset(offset);
-			const StructInfo* stInfo = structAnalyzer->getStructInfo(stType);
-			assert(stInfo != NULL && "structInfoMap should have info for all structs!");
-			
-			ret += stInfo->getOffset(idx);
-			offset -= stLayout->getElementOffset(idx);
-			trueElemType = stType->getElementType(idx);
-		}
-		else
-		{
-			if (offset != 0)
-			{
-				errs() << "Warning: GEP into the middle of a field. This usually occurs when union is used. Since partial alias is not supported, correctness is not guanranteed here.\n";
-				break;
-			}
-		}
-	}
 	return ret;
 }
 

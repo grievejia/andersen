@@ -13,9 +13,6 @@ using namespace llvm;
 
 namespace {
 
-// ConstraintEdge = Node + Offset
-typedef std::pair<NodeIndex, unsigned> ConstraintEdge;
-
 // This class represent the constraint graph
 // It only support edge insertion and edge query, which is enough for our purpose
 class ConstraintGraph
@@ -23,24 +20,25 @@ class ConstraintGraph
 public:
 	struct EdgeSets
 	{
-		std::set<ConstraintEdge> copyEdges, loadEdges, storeEdges;
+		// We use set rather than SmallSet because we need the capability of iteration
+		std::set<NodeIndex> copyEdges, loadEdges, storeEdges;
 	};
 private:
 	std::map<NodeIndex, EdgeSets> graph;
 public:
 	ConstraintGraph() {}
 
-	bool insertCopyEdge(NodeIndex src, NodeIndex dst, unsigned offset)
+	bool insertCopyEdge(NodeIndex src, NodeIndex dst)
 	{
-		return graph[src].copyEdges.insert(std::make_pair(dst, offset)).second;
+		return graph[src].copyEdges.insert(dst).second;
 	}
-	bool insertLoadEdge(NodeIndex src, NodeIndex dst, unsigned offset)
+	bool insertLoadEdge(NodeIndex src, NodeIndex dst)
 	{
-		return graph[src].loadEdges.insert(std::make_pair(dst, offset)).second;
+		return graph[src].loadEdges.insert(dst).second;
 	}
-	bool insertStoreEdge(NodeIndex src, NodeIndex dst, unsigned offset)
+	bool insertStoreEdge(NodeIndex src, NodeIndex dst)
 	{
-		return graph[src].storeEdges.insert(std::make_pair(dst, offset)).second;
+		return graph[src].storeEdges.insert(dst).second;
 	}
 
 	const EdgeSets* getSuccessors(NodeIndex n)
@@ -187,20 +185,17 @@ private:
 					break;
 				case AndersConstraint::LOAD:
 				{
-					if (c.getOffset() == 0)
-						offlineGraph[dstTgt].set(getRefNodeIndex(srcTgt));
+					offlineGraph[dstTgt].set(getRefNodeIndex(srcTgt));
 					break;
 				}
 				case AndersConstraint::STORE:
 				{
-					if (c.getOffset() == 0)
-						offlineGraph[getRefNodeIndex(dstTgt)].set(srcTgt);
+					offlineGraph[getRefNodeIndex(dstTgt)].set(srcTgt);
 					break;
 				}
 				case AndersConstraint::COPY:
 				{
-					if (c.getOffset() == 0)
-						offlineGraph[dstTgt].set(srcTgt);
+					offlineGraph[dstTgt].set(srcTgt);
 					break;
 				}
 			}
@@ -313,17 +308,17 @@ void buildConstraintGraph(ConstraintGraph& cGraph, const std::vector<AndersConst
 			}
 			case AndersConstraint::LOAD:
 			{
-				cGraph.insertLoadEdge(srcTgt, dstTgt, c.getOffset());
+				cGraph.insertLoadEdge(srcTgt, dstTgt);
 				break;
 			}
 			case AndersConstraint::STORE:
 			{
-				cGraph.insertStoreEdge(dstTgt, srcTgt, c.getOffset());
+				cGraph.insertStoreEdge(dstTgt, srcTgt);
 				break;
 			}
 			case AndersConstraint::COPY:
 			{
-				cGraph.insertCopyEdge(srcTgt, dstTgt, c.getOffset());
+				cGraph.insertCopyEdge(srcTgt, dstTgt);
 				break;
 			}
 		}
@@ -387,7 +382,7 @@ void Andersen::solveConstraints()
 			// Once again, since there are too many states to keep track of when detecting cycles, we use another class to do all the work
 			//OnlineCycleDetector cycleDetector(nodeFactory, constraintGraph, cycleCandidates);
 			//cycleDetector.run();
-			//cycleCandidates.clear();
+			cycleCandidates.clear();
 		}
 
 		while (!currWorkList->isEmpty())
@@ -405,25 +400,21 @@ void Andersen::solveConstraints()
 				const AndersPtsSet& ptsSet = ptsItr->second;
 				for (auto v: ptsSet)
 				{
-					for (auto const& edge: graphSucc->loadEdges)
+					for (auto const& dst: graphSucc->loadEdges)
 					{
-						NodeIndex tgtNode = edge.first;
-						tgtNode = nodeFactory.getMergeTarget(tgtNode);
-						unsigned offset = edge.second;
+						NodeIndex tgtNode = nodeFactory.getMergeTarget(dst);
 						//errs() << "Examining load edge " << node << " -> " << tgtNode << ", offset = " << offset << "\n";
-						if (constraintGraph.insertCopyEdge(v, tgtNode, offset))
+						if (constraintGraph.insertCopyEdge(v, tgtNode))
 						{
 							//errs() << "\tInsert copy edge " << v << " -> " << tgtNode << ", offset = " << offset << "\n";
 							nextWorkList->enqueue(v);
 						}
 					}
 
-					for (auto const& edge: graphSucc->storeEdges)
+					for (auto const& dst: graphSucc->storeEdges)
 					{
-						NodeIndex tgtNode = edge.first;
-						tgtNode = nodeFactory.getMergeTarget(tgtNode);
-						unsigned offset = edge.second;
-						if (constraintGraph.insertCopyEdge(tgtNode, v, offset))
+						NodeIndex tgtNode = nodeFactory.getMergeTarget(dst);
+						if (constraintGraph.insertCopyEdge(tgtNode, v))
 						{
 							//errs() << "\tInsert copy edge " << tgtNode << " -> " << v << ", offset = " << offset << "\n";
 							nextWorkList->enqueue(tgtNode);
@@ -432,39 +423,16 @@ void Andersen::solveConstraints()
 				}
 				
 				// Finally, it's time to propagate pts-to info along the copy edges
-				for (auto const& edge: graphSucc->copyEdges)
+				for (auto const& dst: graphSucc->copyEdges)
 				{
-					NodeIndex tgtNode = edge.first;
-					tgtNode = nodeFactory.getMergeTarget(tgtNode);
-					unsigned offset = edge.second;
+					NodeIndex tgtNode = nodeFactory.getMergeTarget(dst);
 					AndersPtsSet& tgtPtsSet = ptsGraph[tgtNode];
 					// Here we need to re-compute ptsSet because the previous line may cause an map insertion, which will invalidate any existing map iterators
 					const AndersPtsSet& ptsSet = ptsGraph[node];
-					bool isChanged = false;
-					if (offset == 0)
-						isChanged = tgtPtsSet.unionWith(ptsSet);
-					else
-					{
-						for (auto v: ptsSet)
-						{
-							if (v == nodeFactory.getUniversalObjNode())
-							{
-								isChanged |= tgtPtsSet.insert(v);
-								break;
-							}
-							//assert(v + offset < nodeFactory.getNumNodes() && "Node index out of range!");
-							isChanged |= tgtPtsSet.insert(v + offset);
-						}
-					}
+					bool isChanged =  tgtPtsSet.unionWith(ptsSet);
 
 					if (isChanged)
 					{
-						// If tgtPtsSet gets the universal object, just keep that object and discard everything else
-						if (tgtPtsSet.has(nodeFactory.getUniversalObjNode()))
-						{
-							tgtPtsSet.clear();
-							tgtPtsSet.insert(nodeFactory.getUniversalObjNode());
-						}
 						nextWorkList->enqueue(tgtNode);
 					}
 					else
