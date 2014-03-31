@@ -286,8 +286,8 @@ protected:
 		std::vector<AndersConstraint> newConstraints;
 		for (auto const& c: constraints)
 		{
-			// First, if the lhs or rhs of c has label 0 (non-ptr), ignore this constraint
-			if (peLabel[c.getDest()] == 0 || peLabel[c.getSrc()] == 0)
+			// First, if the lhs c has label 0 (non-ptr), ignore this constraint
+			if (peLabel[c.getDest()] == 0)
 				continue;
 
 			// Change the lhs to its mergeTarget
@@ -305,6 +305,8 @@ protected:
 				}
 				case AndersConstraint::LOAD:
 				{
+					if (peLabel[srcTgt] == 0)
+						break;
 					// If the rhs is equivalent to some ADR node, then we are able to replace the load with a copy
 					NodeIndex srcTgtTgt = revLabelMap[peLabel[srcTgt]];
 					if (srcTgtTgt > nodeFactory.getNumNodes())
@@ -345,6 +347,9 @@ protected:
 				{
 					// Remove useless constraint "A=A"
 					if (destTgt == srcTgt && c.getOffset() == 0)
+						break;
+
+					if (peLabel[srcTgt] == 0)
 						break;
 
 					// If the rhs is equivalent to some ADR node, then we are able to replace the copy with an addr_of
