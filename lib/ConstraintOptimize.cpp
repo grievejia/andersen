@@ -1,4 +1,6 @@
 #include "Andersen.h"
+#include "CycleDetector.h"
+#include "SparseBitVectorGraph.h"
 
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/DenseSet.h"
@@ -34,39 +36,32 @@ struct SparseBitVectorKeyEqual
 };
 
 // There is something in common in HVN and HU. Put all the shared stuffs in the base class here
-class ConstraintOptimizer
+class ConstraintOptimizer: public CycleDetector<SparseBitVectorGraph>
 {
 protected:
 	std::vector<AndersConstraint>& constraints;
 	AndersNodeFactory& nodeFactory;
 
+	// The predecessor graph
+	SparseBitVectorGraph predGraph;
 	// Nodes that must be treated conservatively (i.e. never merge with others)
 	// Note that REF nodes and ADR nodes are all automatically indirect nodes. This set only keep track of indirect nodes that are not REF or ADR
 	DenseSet<NodeIndex> indirectNodes;
 
-	// The predecessor graph
-	DenseMap<NodeIndex, SparseBitVector<>> predGraph;
 	// Map from NodeIndex to Pointer Equivalence Class
 	std::vector<unsigned> peLabel;
 	// Current pointer equivalence class number
 	unsigned pointerEqClass;
 
-	// The SCC stack
-	std::stack<unsigned> sccStack;
-	// Map from NodeIndex to DFS number, and negative DFS number means never visited
-	std::vector<int> dfsNum;
-	// The "inComponent" array in Nutilla's improved SCC algorithm
-	std::deque<bool> inComponent;
 	// Store the "representative" (or "leader") when there is a merge in the cycle. Note that this is different from AndersNode::mergeTarget, which will be set AFTER the optimization
 	std::vector<NodeIndex> mergeTarget;
-	// DFS timestamp
-	int timestamp;
 
 	// During variable substitution, we create unknowns to represent the unknown value that is a dereference of a variable.  These nodes are known as "ref" nodes (since they represent the value of dereferences)
 	// Return the node index of the "ref node" (used to represent *n) of n. 
 	// We won't actually create that ref node. We cannot use the NodeIndex of that refNode to index into nodeFactory
 	NodeIndex getRefNodeIndex(NodeIndex n) const
 	{
+		assert(n < nodeFactory.getNumNodes());
 		return n + nodeFactory.getNumNodes();
 	}
 
@@ -74,7 +69,7 @@ protected:
 	// We won't actually create that adr node. We cannot use the NodeIndex of that adrNode to index into nodeFactory
 	NodeIndex getAdrNodeIndex(NodeIndex n) const
 	{
-		//assert(nodeFactory.isObjectNode(n) && "ADR node of a top-level var does not make sense!");
+		assert(n < nodeFactory.getNumNodes());
 		return n + 2 * nodeFactory.getNumNodes();
 	}
 
@@ -90,29 +85,29 @@ protected:
 				{
 					indirectNodes.insert(srcTgt);
 					// Dest = &src edge
-					predGraph[dstTgt].set(getAdrNodeIndex(srcTgt));
+					predGraph.insertEdge(dstTgt, getAdrNodeIndex(srcTgt));
 					// *Dest = src edge
-					predGraph[getRefNodeIndex(dstTgt)].set(srcTgt);
+					predGraph.insertEdge(getRefNodeIndex(dstTgt), srcTgt);
 					break;
 				}
 				case AndersConstraint::LOAD:
 				{
 					// dest = *src edge
-					predGraph[dstTgt].set(getRefNodeIndex(srcTgt));
+					predGraph.insertEdge(dstTgt, getRefNodeIndex(srcTgt));
 					break;
 				}
 				case AndersConstraint::STORE:
 				{
 					// *dest = src edge
-					predGraph[getRefNodeIndex(dstTgt)].set(srcTgt);
+					predGraph.insertEdge(getRefNodeIndex(dstTgt), srcTgt);
 					break;
 				}
 				case AndersConstraint::COPY:
 				{
 					// Dest = Src edge
-					predGraph[dstTgt].set(srcTgt);
+					predGraph.insertEdge(dstTgt, srcTgt);
 					// *Dest = *Src edge
-					predGraph[getRefNodeIndex(dstTgt)].set(getRefNodeIndex(srcTgt));
+					predGraph.insertEdge(getRefNodeIndex(dstTgt), getRefNodeIndex(srcTgt));
 					break;
 				}
 			}
@@ -135,8 +130,8 @@ protected:
 		{
 			printPredecessorGraphNode(errs(), mapping.first);
 			errs()<< "  -->  ";
-			const SparseBitVector<>& edges = mapping.second;
-			for (auto const& idx: edges)
+			const SparseBitVectorGraphNode& sNode = mapping.second;
+			for (auto const& idx: sNode)
 			{
 				printPredecessorGraphNode(errs(), idx);
 				errs() << ", ";
@@ -168,8 +163,8 @@ protected:
 				os << "\"]\n";
 				hasLabel[mapping.first] = true;
 			}
-			const SparseBitVector<>& edges = mapping.second;
-			for (auto const& idx: edges)
+			const SparseBitVectorGraphNode& sNode = mapping.second;
+			for (auto const& idx: sNode)
 			{
 				if (!hasLabel[idx])
 				{
@@ -186,58 +181,26 @@ protected:
 		outFile.keep();
 	}
 
-	void visit(NodeIndex node)
+	NodeType* getRep(NodeIndex idx) override
 	{
-		//errs() << "visiting "; printPredecessorGraphNode(errs(), node); errs() << '\n';
-		assert(node < nodeFactory.getNumNodes() * 3 && "Visiting a non-existent node!");
-		int myTimeStamp = timestamp++;
-		dfsNum[node] = myTimeStamp;
+		return predGraph.getOrInsertNode(mergeTarget[idx]);
+	}
+	// Specify how to process the non-rep nodes if a cycle is found
+	void processNodeOnCycle(const NodeType* node, const NodeType* repNode) override
+	{
+		NodeIndex nodeIdx = node->getNodeIndex();
+		NodeIndex repIdx = repNode->getNodeIndex();
+		mergeTarget[nodeIdx] = repIdx;
+		if (repIdx < nodeFactory.getNumNodes() && indirectNodes.count(nodeIdx))
+			indirectNodes.insert(repIdx);
 
-		// Traverse predecessor edges
-		auto predItr = predGraph.find(node);
-		if (predItr != predGraph.end())
-		{
-			const SparseBitVector<>& edges = predItr->second;
-			for (auto const& pred: edges)
-			{
-				NodeIndex predRep = mergeTarget[pred];
-				if (dfsNum[predRep] < 0)
-					visit(predRep);
+		predGraph.mergeEdge(repIdx, nodeIdx);
+	}
 
-				if (!inComponent[predRep] && dfsNum[node] > dfsNum[predRep])
-					dfsNum[node] = dfsNum[predRep];
-			}
-		}
-
-		// See if we have any cycle detected
-		if (myTimeStamp != dfsNum[node])
-		{
-			// If not, push the sccStack and go on
-			sccStack.push(node);
-			return;
-		}
-
-		inComponent[node] = true;
-		// Merge All nodes in the cycle
-		while (!sccStack.empty())
-		{
-			NodeIndex cycleNode = sccStack.top();
-			if (dfsNum[cycleNode] < myTimeStamp)
-				break;
-
-			mergeTarget[cycleNode] = node;
-			//inComponent[cycleNode] = true;
-			if (node < nodeFactory.getNumNodes() && indirectNodes.count(cycleNode))
-				indirectNodes.insert(node);
-
-			auto cycleItr = predGraph.find(cycleNode);
-			if (cycleItr != predGraph.end())
-				predGraph[node] |= (cycleItr->second);
-
-			sccStack.pop();
-		}
-
-		propagateLabel(node);
+	// Specify how to process the rep nodes if a cycle is found
+	void processCycleRepNode(const NodeType* node) override
+	{
+		propagateLabel(node->getNodeIndex());
 	}
 
 	void rewriteConstraint()
@@ -371,43 +334,27 @@ protected:
 	virtual void releaseMemory()
 	{
 		indirectNodes.clear();
-		predGraph.clear();
 		peLabel.clear();
-		dfsNum.clear();
-		inComponent.clear();
 		mergeTarget.clear();
+		predGraph.releaseMemory();
+		releaseSCCMemory();
 	}
 
 	virtual void propagateLabel(NodeIndex node) = 0;
 public:
-	ConstraintOptimizer(std::vector<AndersConstraint>& c, AndersNodeFactory& n): constraints(c), nodeFactory(n), peLabel(n.getNumNodes() * 3), pointerEqClass(1), dfsNum(n.getNumNodes() * 3, -1), inComponent(n.getNumNodes() * 3), mergeTarget(n.getNumNodes() * 3), timestamp(0)
+	ConstraintOptimizer(std::vector<AndersConstraint>& c, AndersNodeFactory& n): constraints(c), nodeFactory(n), peLabel(n.getNumNodes() * 3), pointerEqClass(1), mergeTarget(n.getNumNodes() * 3)
 	{
 		for (unsigned i = 0, e = mergeTarget.size(); i < e; ++i)
 			mergeTarget[i] = i;
-	}
 
-	void run()
-	{
 		// Build a predecessor graph.  This is like our constraint graph with the edges going in the opposite direction, and there are edges for all the constraints, instead of just copy constraints.  We also build implicit edges for constraints are implied but not explicit.  I.E for the constraint a = &b, we add implicit edges *a = b.  This helps us capture more cycles
 		buildPredecessorGraph();
+	}
 
+	void run() override
+	{
 		// Now run Tarjan's SCC algorithm to find cycles, condense predGraph, and explore possible equivalance relations
-		for (unsigned i = 0, e = nodeFactory.getNumNodes(); i < e; ++i)
-		{
-			NodeIndex rep = nodeFactory.getMergeTarget(i);
-
-			NodeIndex varRep = mergeTarget[rep];
-			if (dfsNum[varRep] < 0)
-				visit(varRep);
-
-			NodeIndex refRep = mergeTarget[getRefNodeIndex(rep)];
-			if (dfsNum[refRep] < 0)
-				visit(refRep);
-
-			NodeIndex adrRep = mergeTarget[getAdrNodeIndex(rep)];
-			if (dfsNum[adrRep] < 0)
-				visit(adrRep);
-		}
+		runOnGraph(&predGraph);
 
 		// For all nodes on the same cycle: assign their representative's pe label to them
 		for (unsigned i = 0, e = nodeFactory.getNumNodes() * 3; i < e; ++i)
@@ -455,11 +402,10 @@ private:
 		bool allSame = true;
 		unsigned lastSeenLabel = 0;
 		SparseBitVector<> predLabels;
-		auto predItr = predGraph.find(node);
-		if (predItr != predGraph.end())
+		const SparseBitVectorGraphNode* sNode = predGraph.getNodeWithIndex(node);
+		if (sNode != nullptr)
 		{
-			const SparseBitVector<>& edges = predItr->second;
-			for (auto const& pred: edges)
+			for (auto const& pred: *sNode)
 			{
 				NodeIndex predRep = mergeTarget[pred];
 				unsigned predRepLabel = peLabel[predRep];
@@ -544,11 +490,10 @@ private:
 
 		// Direct VAR nodes need more careful examination
 		SparseBitVector<>& myPtsSet = ptsSet[node];
-		auto predItr = predGraph.find(node);
-		if (predItr != predGraph.end())
+		SparseBitVectorGraphNode* sNode = predGraph.getNodeWithIndex(node);
+		if (sNode != nullptr)
 		{
-			const SparseBitVector<>& edges = predItr->second;
-			for (auto const& pred: edges)
+			for (auto const& pred: *sNode)
 				myPtsSet |= ptsSet[pred];
 		}
 		
