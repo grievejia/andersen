@@ -54,7 +54,7 @@ protected:
 	unsigned pointerEqClass;
 
 	// Store the "representative" (or "leader") when there is a merge in the cycle. Note that this is different from AndersNode::mergeTarget, which will be set AFTER the optimization
-	std::vector<NodeIndex> mergeTarget;
+	DenseMap<NodeIndex, NodeIndex> mergeTarget;
 
 	// During variable substitution, we create unknowns to represent the unknown value that is a dereference of a variable.  These nodes are known as "ref" nodes (since they represent the value of dereferences)
 	// Return the node index of the "ref node" (used to represent *n) of n. 
@@ -181,16 +181,30 @@ protected:
 		outFile.keep();
 	}
 
+	NodeIndex getMergeTargetRep(NodeIndex idx)
+	{
+		while (true)
+		{
+			auto itr = mergeTarget.find(idx);
+			if (itr == mergeTarget.end())
+				break;
+			else
+				idx = itr->second;
+		}
+
+		return idx;
+	}
+
 	NodeType* getRep(NodeIndex idx) override
 	{
-		return predGraph.getOrInsertNode(mergeTarget[idx]);
+		return predGraph.getOrInsertNode(getMergeTargetRep(idx));
 	}
 	// Specify how to process the non-rep nodes if a cycle is found
 	void processNodeOnCycle(const NodeType* node, const NodeType* repNode) override
 	{
 		NodeIndex nodeIdx = node->getNodeIndex();
 		NodeIndex repIdx = repNode->getNodeIndex();
-		mergeTarget[nodeIdx] = repIdx;
+		mergeTarget[nodeIdx] = getMergeTargetRep(repIdx);
 		if (repIdx < nodeFactory.getNumNodes() && indirectNodes.count(nodeIdx))
 			indirectNodes.insert(repIdx);
 
@@ -342,11 +356,8 @@ protected:
 
 	virtual void propagateLabel(NodeIndex node) = 0;
 public:
-	ConstraintOptimizer(std::vector<AndersConstraint>& c, AndersNodeFactory& n): constraints(c), nodeFactory(n), peLabel(n.getNumNodes() * 3), pointerEqClass(1), mergeTarget(n.getNumNodes() * 3)
+	ConstraintOptimizer(std::vector<AndersConstraint>& c, AndersNodeFactory& n): constraints(c), nodeFactory(n), peLabel(n.getNumNodes() * 3), pointerEqClass(1)
 	{
-		for (unsigned i = 0, e = mergeTarget.size(); i < e; ++i)
-			mergeTarget[i] = i;
-
 		// Build a predecessor graph.  This is like our constraint graph with the edges going in the opposite direction, and there are edges for all the constraints, instead of just copy constraints.  We also build implicit edges for constraints are implied but not explicit.  I.E for the constraint a = &b, we add implicit edges *a = b.  This helps us capture more cycles
 		buildPredecessorGraph();
 	}
@@ -357,18 +368,8 @@ public:
 		runOnGraph(&predGraph);
 
 		// For all nodes on the same cycle: assign their representative's pe label to them
-		for (unsigned i = 0, e = nodeFactory.getNumNodes() * 3; i < e; ++i)
-		{
-			NodeIndex rep = mergeTarget[i];
-			if (rep == i)
-				continue;
-			else
-			{
-				while (rep != mergeTarget[rep])
-					rep = mergeTarget[rep];
-				peLabel[i] = peLabel[rep];
-			}
-		}
+		for (auto const& mapping: mergeTarget)
+			peLabel[mapping.first] = peLabel[getMergeTargetRep(mapping.second)];
 
 		/*for (unsigned i = 0; i < peLabel.size(); ++i)
 		{
@@ -407,7 +408,7 @@ private:
 		{
 			for (auto const& pred: *sNode)
 			{
-				NodeIndex predRep = mergeTarget[pred];
+				NodeIndex predRep = getMergeTargetRep(pred);
 				unsigned predRepLabel = peLabel[predRep];
 				// Ignore labels that are equal to us or non-pointers
 				if (predRep == node || predRepLabel == 0)
@@ -460,7 +461,7 @@ private:
 	// Map from a set of NodeIndex to Pointer Equivalence Class
 	std::unordered_map<SparseBitVector<>, unsigned, SparseBitVectorHash, SparseBitVectorKeyEqual> setLabel;
 	// Map from NodeIndex to its offline pts-set
-	std::vector<SparseBitVector<>> ptsSet;
+	DenseMap<unsigned, SparseBitVector<>> ptsSet;
 
 	void propagateLabel(NodeIndex node) override
 	{
@@ -494,7 +495,13 @@ private:
 		if (sNode != nullptr)
 		{
 			for (auto const& pred: *sNode)
-				myPtsSet |= ptsSet[pred];
+			{
+				// Be careful! Any insertion to ptsSet here will invalidate myPtsSet
+				NodeIndex predRep = getMergeTargetRep(pred);
+				auto itr = ptsSet.find(predRep);
+				if (itr != ptsSet.end())
+					myPtsSet |= (itr->second);
+			}
 		}
 		
 		//errs() << "ptsSet [" << node << "] = ";
@@ -522,7 +529,7 @@ private:
 		}
 	}
 public:
-	HUOptimizer(std::vector<AndersConstraint>& c, AndersNodeFactory& n): ConstraintOptimizer(c, n), ptsSet(nodeFactory.getNumNodes() * 3) {}
+	HUOptimizer(std::vector<AndersConstraint>& c, AndersNodeFactory& n): ConstraintOptimizer(c, n) {}
 
 	void releaseMemory() override
 	{
@@ -538,6 +545,7 @@ public:
 void Andersen::optimizeConstraints()
 {
 	//errs() << "\n#constraints = " << constraints.size() << "\n";
+	//dumpConstraints();
 
 	// First, let's do HVN
 	// There is an additional assumption here that before HVN, we have not merged any two nodes. Might fix that in the future

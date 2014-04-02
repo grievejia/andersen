@@ -29,7 +29,7 @@ static const char* noopFuncs[] = {
 	"random", "tolower","toupper", "towlower", "towupper", "system", "clock",
 	"exit", "abort", "gettimeofday", "settimeofday",
 	"rand", "rand_r", "srand", "seed48", "drand48", "lrand48", "srand48",
-	"__isoc99_sscanf", "fclose", "close", "perror", 
+	"__isoc99_sscanf", "__isoc99_fscanf", "fclose", "close", "perror", 
 	"strerror", // this function returns an extenal static pointer
 	"__errno_location", "__ctype_b_loc", "abs", "difftime", "setbuf",
 	"_ZdlPv", "_ZdaPv",	// delete and delete[]
