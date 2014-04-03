@@ -463,14 +463,15 @@ private:
 	// Map from NodeIndex to its offline pts-set
 	DenseMap<unsigned, SparseBitVector<>> ptsSet;
 
-	void propagateLabel(NodeIndex node) override
+	// Try to assign a single label to node. Return true if the assignment succeeds
+	bool assignLabel(NodeIndex node)
 	{
 		// ADR nodes get a unique label and a pts-set that contains the corresponding VAR node
 		if (node >= nodeFactory.getNumNodes() * 2)
 		{
 			peLabel[node] = pointerEqClass++;
 			ptsSet[node].set(node - nodeFactory.getNumNodes() * 2);
-			return;
+			return true;
 		}
 
 		// REF nodes get a unique label and a pts-set that contains itself (which can never collide with VAR nodes)
@@ -478,7 +479,7 @@ private:
 		{
 			peLabel[node] = pointerEqClass++;
 			ptsSet[node].set(node);
-			return;
+			return true;
 		}
 
 		// Indirect VAR nodes get a unique label and a pts-set that contains its corresponding ADR node (which can never collide with VAR and REF nodes)
@@ -486,8 +487,29 @@ private:
 		{
 			peLabel[node] = pointerEqClass++;
 			ptsSet[node].set(getAdrNodeIndex(node));
-			return;
+			return true;
 		}
+
+		return false;
+	}
+
+	// Note that ConstraintOptimizer::processNodeOnCycle() is not enough here, because when we merge two nodes we also want the ptsSet of these two nodes to be merged.
+	void processNodeOnCycle(const NodeType* node, const NodeType* repNode) override
+	{
+		ConstraintOptimizer::processNodeOnCycle(node, repNode);
+		
+		if (!assignLabel(node->getNodeIndex()))
+			return;
+
+		auto itr = ptsSet.find(node->getNodeIndex());
+		if (itr != ptsSet.end())
+			ptsSet[repNode->getNodeIndex()] |= itr->second;
+	}
+
+	void propagateLabel(NodeIndex node) override
+	{
+		if (assignLabel(node))
+			return;
 
 		// Direct VAR nodes need more careful examination
 		SparseBitVector<>& myPtsSet = ptsSet[node];
@@ -545,7 +567,7 @@ public:
 void Andersen::optimizeConstraints()
 {
 	//errs() << "\n#constraints = " << constraints.size() << "\n";
-	//dumpConstraints();
+	dumpConstraints();
 
 	// First, let's do HVN
 	// There is an additional assumption here that before HVN, we have not merged any two nodes. Might fix that in the future
@@ -553,15 +575,15 @@ void Andersen::optimizeConstraints()
 	hvn.run();
 	hvn.releaseMemory();
 
-	//nodeFactory.dumpRepInfo();
-	//dumpConstraints();
+	nodeFactory.dumpRepInfo();
+	dumpConstraints();
 
 	//errs() << "#constraints = " << constraints.size() << "\n";
 
 	// Next, do HU
 	// There is an additional assumption here that before HU, the predecessor graph will have no cycle. Might fix that in the future
-	HUOptimizer hu(constraints, nodeFactory);
-	hu.run();
+	//HUOptimizer hu(constraints, nodeFactory);
+	//hu.run();
 
 	//nodeFactory.dumpRepInfo();
 	//dumpConstraints();

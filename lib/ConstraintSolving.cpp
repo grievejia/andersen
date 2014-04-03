@@ -242,7 +242,8 @@ void collapseNodes(NodeIndex dst, NodeIndex src, AndersNodeFactory& nodeFactory,
 
 	// Node merge
 	nodeFactory.mergeNode(dst, src);
-	ptsGraph[dst].unionWith(ptsGraph[src]);
+	if (ptsGraph.count(src))
+		ptsGraph[dst].unionWith(ptsGraph[src]);
 	constraintGraph.mergeNodes(dst, src);
 
 	// We don't need the node cycleIdx any more
@@ -607,7 +608,7 @@ void Andersen::solveConstraints()
 						NodeIndex tgtNode = nodeFactory.getMergeTarget(dst);
 						if (constraintGraph.insertCopyEdge(tgtNode, vRep))
 						{
-							//errs() << "\tInsert copy edge " << tgtNode << " -> " << v << ", offset = " << offset << "\n";
+							//errs() << "\tInsert copy edge " << tgtNode << " -> " << v << "\n";
 							nextWorkList->enqueue(tgtNode);
 						}
 
@@ -626,9 +627,10 @@ void Andersen::solveConstraints()
 				for (auto const& dst: *cNode)
 				{
 					NodeIndex tgtNode = nodeFactory.getMergeTarget(dst);
-					AndersPtsSet& tgtPtsSet = ptsGraph[tgtNode];
 					if (node == tgtNode)
 						continue;
+					AndersPtsSet& tgtPtsSet = ptsGraph[tgtNode];
+					
 					//errs() << "pts[" << tgtNode << "] |= pts[" << node << "]\n";
 					bool isChanged =  tgtPtsSet.unionWith(ptsSet);
 

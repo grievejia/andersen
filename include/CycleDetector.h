@@ -64,7 +64,7 @@ private:
 				break;
 
 			processNodeOnCycle(cycleNode, node);
-
+			inComponent.insert(cycleNode);
 			sccStack.pop();
 		}
 

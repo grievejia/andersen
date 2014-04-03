@@ -55,7 +55,7 @@ void Andersen::dumpConstraint(const AndersConstraint& item) const
 		case AndersConstraint::LOAD:
 		{
 			nodeFactory.dumpNode(dest);
-			errs() << " = *(";
+			errs() << " = *";
 			nodeFactory.dumpNode(src);
 			break;
 		}
@@ -63,7 +63,7 @@ void Andersen::dumpConstraint(const AndersConstraint& item) const
 		{
 			errs() << "*";
 			nodeFactory.dumpNode(dest);
-			errs() << " = (";
+			errs() << " = ";
 			nodeFactory.dumpNode(src);
 			break;
 		}
