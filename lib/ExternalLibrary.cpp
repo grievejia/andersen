@@ -27,7 +27,8 @@ static const char* noopFuncs[] = {
 	"iswupper", "sin", "cos", "sinf", "cosf", "asin", "acos", "tan", "atan",
 	"fabs", "pow", "floor", "ceil", "sqrt", "sqrtf", "hypot", 
 	"random", "tolower","toupper", "towlower", "towupper", "system", "clock",
-	"exit", "abort", "gettimeofday", "settimeofday",
+	"exit", "abort", "gettimeofday", "settimeofday", "sleep",
+	"qsort", "popen", "pclose",
 	"rand", "rand_r", "srand", "seed48", "drand48", "lrand48", "srand48",
 	"__isoc99_sscanf", "__isoc99_fscanf", "fclose", "close", "perror", 
 	"strerror", // this function returns an extenal static pointer
@@ -38,6 +39,8 @@ static const char* noopFuncs[] = {
 	"llvm.lifetime.start", "llvm.lifetime.end", "llvm.stackrestore",
 	"memset", "llvm.memset.i32", "llvm.memset.p0i8.i32", "llvm.memset.i64",
 	"llvm.memset.p0i8.i64", "llvm.va_end",
+	// The following functions might not be NOOP. They need to be removed from this list in the future
+	"setrlimit", "getrlimit",
 	nullptr
 };
 
@@ -62,8 +65,15 @@ static const char* retArg0Funcs[] = {
 	nullptr
 };
 
+static const char* retArg1Funcs[] = {
+	// Actually the return value of signal() will NOT alias its second argument, but if you call it twice the return values may alias. We're making conservative assumption here
+	"signal",
+	nullptr
+};
+
 static const char* retArg2Funcs[] = {
-	"freopen", nullptr
+	"freopen",
+	nullptr
 };
 
 static const char* memcpyFuncs[] = {
@@ -141,6 +151,16 @@ bool Andersen::addConstraintForExternalLibrary(ImmutableCallSite cs, const Funct
 		NodeIndex arg0Index = nodeFactory.getValueNodeFor(cs.getArgument(0));
 		assert(arg0Index != AndersNodeFactory::InvalidIndex && "Failed to find arg0 node");
 		constraints.emplace_back(AndersConstraint::COPY, retIndex, arg0Index);
+		return true;
+	}
+
+	if (lookupName(retArg1Funcs, f->getName().data()))
+	{
+		NodeIndex retIndex = nodeFactory.getValueNodeFor(cs.getInstruction());
+		assert(retIndex != AndersNodeFactory::InvalidIndex && "Failed to find call site node");
+		NodeIndex arg1Index = nodeFactory.getValueNodeFor(cs.getArgument(1));
+		assert(arg1Index != AndersNodeFactory::InvalidIndex && "Failed to find arg1 node");
+		constraints.emplace_back(AndersConstraint::COPY, retIndex, arg1Index);
 		return true;
 	}
 

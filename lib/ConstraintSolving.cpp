@@ -451,7 +451,7 @@ private:
 	void processNodeOnCycle(const NodeType* node, const NodeType* repNode) override
 	{
 		NodeIndex repIdx = repNode->getNodeIndex();
-		NodeIndex cycleIdx = node->getNodeIndex();
+		NodeIndex cycleIdx = nodeFactory.getMergeTarget(node->getNodeIndex());
 		//errs() << "Collapse node " << cycleIdx << " with node " << repIdx << "\n";
 
 		collapseNodes(repIdx, cycleIdx, nodeFactory, ptsGraph, constraintGraph);
@@ -552,6 +552,7 @@ void Andersen::solveConstraints()
 				NodeIndex collapseTarget = offlineInfo.getCollapseTarget(node);
 				if (collapseTarget != AndersNodeFactory::InvalidIndex)
 				{
+					//errs() << "node = " << node << ", collapseTgt = " << collapseTarget << "\n";
 					NodeIndex ctRep = nodeFactory.getMergeTarget(collapseTarget);
 					// Here we have to pay special attention to whether the node points-to itself.
 					bool mergeSelf = false;
@@ -621,7 +622,7 @@ void Andersen::solveConstraints()
 					for (auto const& mapping: updateMap)
 						cNode->replaceStoreEdge(mapping.first, mapping.second);
 				}
-				
+
 				DenseMap<NodeIndex, NodeIndex> updateMap;
 				// Finally, it's time to propagate pts-to info along the copy edges
 				for (auto const& dst: *cNode)
@@ -654,7 +655,7 @@ void Andersen::solveConstraints()
 						updateMap[dst] = tgtNode;
 				}
 
-				// Now perform the store edge updates
+				// Now perform the copy edge updates
 				for (auto const& mapping: updateMap)
 					cNode->replaceCopyEdge(mapping.first, mapping.second);
 			}

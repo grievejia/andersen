@@ -49,7 +49,7 @@ protected:
 	DenseSet<NodeIndex> indirectNodes;
 
 	// Map from NodeIndex to Pointer Equivalence Class
-	std::vector<unsigned> peLabel;
+	DenseMap<NodeIndex, unsigned> peLabel;
 	// Current pointer equivalence class number
 	unsigned pointerEqClass;
 
@@ -205,7 +205,7 @@ protected:
 		NodeIndex nodeIdx = node->getNodeIndex();
 		NodeIndex repIdx = repNode->getNodeIndex();
 		mergeTarget[nodeIdx] = getMergeTargetRep(repIdx);
-		if (repIdx < nodeFactory.getNumNodes() && indirectNodes.count(nodeIdx))
+		if (repIdx < nodeFactory.getNumNodes() && (indirectNodes.count(nodeIdx) || nodeIdx > nodeFactory.getNumNodes()))
 			indirectNodes.insert(repIdx);
 
 		predGraph.mergeEdge(repIdx, nodeIdx);
@@ -226,28 +226,37 @@ protected:
 
 		std::vector<NodeIndex> revLabelMap(pointerEqClass, AndersNodeFactory::InvalidIndex);
 		// Scan all the VAR nodes to see if any of them have the same label as other VAR nodes. We have to perform the merge before constraint rewriting
-		for (unsigned i = 0, e = nodeFactory.getNumNodes(); i < e; ++i)
+
+		for (auto const& mapping: peLabel)
 		{
-			if (nodeFactory.getMergeTarget(i) != i)
+			NodeIndex node = mapping.first;
+			if (node >= nodeFactory.getNumNodes())
 				continue;
 
-			unsigned iLabel = peLabel[i];
+			if (nodeFactory.getMergeTarget(node) != node)
+				continue;
+
+			unsigned iLabel = mapping.second;
 			if (revLabelMap[iLabel] == AndersNodeFactory::InvalidIndex)
-				revLabelMap[iLabel] = i;
+				revLabelMap[iLabel] = node;
 			else if (iLabel != 0)	// We have already found a VAR or ADR node with the same label. Note we must exclude label 0 since it's special and cannot be merged
 			{
 				//errs() << "MERGE " << i << "with" << revLabelMap[iLabel] << "\n";
-				nodeFactory.mergeNode(revLabelMap[iLabel], i);
+				nodeFactory.mergeNode(revLabelMap[iLabel], node);
 			}
 		}
 
 		// Collect all peLabels that are assigned to ADR nodes
-		for (unsigned i = nodeFactory.getNumNodes() * 2, e = nodeFactory.getNumNodes() * 3; i < e; ++i)
+		for (auto const& mapping: peLabel)
 		{
-			NodeIndex varNode = i - nodeFactory.getNumNodes() * 2;
+			NodeIndex node = mapping.first;
+			if (node < nodeFactory.getNumNodes() * 2)
+				continue;
+
+			NodeIndex varNode = node - nodeFactory.getNumNodes() * 2;
 			if (nodeFactory.getMergeTarget(varNode) != varNode)
 				continue;
-			revLabelMap[peLabel[i]] = i;
+			revLabelMap[mapping.second] = node;
 		}
 
 		// Now scan all constraints and see if we can simplify them
@@ -356,7 +365,7 @@ protected:
 
 	virtual void propagateLabel(NodeIndex node) = 0;
 public:
-	ConstraintOptimizer(std::vector<AndersConstraint>& c, AndersNodeFactory& n): constraints(c), nodeFactory(n), peLabel(n.getNumNodes() * 3), pointerEqClass(1)
+	ConstraintOptimizer(std::vector<AndersConstraint>& c, AndersNodeFactory& n): constraints(c), nodeFactory(n), pointerEqClass(1)
 	{
 		// Build a predecessor graph.  This is like our constraint graph with the edges going in the opposite direction, and there are edges for all the constraints, instead of just copy constraints.  We also build implicit edges for constraints are implied but not explicit.  I.E for the constraint a = &b, we add implicit edges *a = b.  This helps us capture more cycles
 		buildPredecessorGraph();
@@ -493,19 +502,6 @@ private:
 		return false;
 	}
 
-	// Note that ConstraintOptimizer::processNodeOnCycle() is not enough here, because when we merge two nodes we also want the ptsSet of these two nodes to be merged.
-	void processNodeOnCycle(const NodeType* node, const NodeType* repNode) override
-	{
-		ConstraintOptimizer::processNodeOnCycle(node, repNode);
-		
-		if (!assignLabel(node->getNodeIndex()))
-			return;
-
-		auto itr = ptsSet.find(node->getNodeIndex());
-		if (itr != ptsSet.end())
-			ptsSet[repNode->getNodeIndex()] |= itr->second;
-	}
-
 	void propagateLabel(NodeIndex node) override
 	{
 		if (assignLabel(node))
@@ -567,7 +563,7 @@ public:
 void Andersen::optimizeConstraints()
 {
 	//errs() << "\n#constraints = " << constraints.size() << "\n";
-	dumpConstraints();
+	//dumpConstraints();
 
 	// First, let's do HVN
 	// There is an additional assumption here that before HVN, we have not merged any two nodes. Might fix that in the future
@@ -575,15 +571,15 @@ void Andersen::optimizeConstraints()
 	hvn.run();
 	hvn.releaseMemory();
 
-	nodeFactory.dumpRepInfo();
-	dumpConstraints();
+	//nodeFactory.dumpRepInfo();
+	//dumpConstraints();
 
 	//errs() << "#constraints = " << constraints.size() << "\n";
 
 	// Next, do HU
 	// There is an additional assumption here that before HU, the predecessor graph will have no cycle. Might fix that in the future
-	//HUOptimizer hu(constraints, nodeFactory);
-	//hu.run();
+	HUOptimizer hu(constraints, nodeFactory);
+	hu.run();
 
 	//nodeFactory.dumpRepInfo();
 	//dumpConstraints();
