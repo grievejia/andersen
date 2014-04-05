@@ -450,7 +450,7 @@ private:
 	// Specify how to process the non-rep nodes if a cycle is found
 	void processNodeOnCycle(const NodeType* node, const NodeType* repNode) override
 	{
-		NodeIndex repIdx = repNode->getNodeIndex();
+		NodeIndex repIdx = nodeFactory.getMergeTarget(repNode->getNodeIndex());
 		NodeIndex cycleIdx = nodeFactory.getMergeTarget(node->getNodeIndex());
 		//errs() << "Collapse node " << cycleIdx << " with node " << repIdx << "\n";
 

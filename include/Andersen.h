@@ -107,6 +107,8 @@ public:
 	bool runOnModule(llvm::Module& M);
 	void getAnalysisUsage(llvm::AnalysisUsage &AU) const;
 	void releaseMemory();
+
+	friend class AndersenAA;
 };
 
 #endif

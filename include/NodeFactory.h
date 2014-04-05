@@ -81,7 +81,7 @@ public:
 	NodeIndex createReturnNode(const llvm::Function* f);
 	NodeIndex createVarargNode(const llvm::Function* f);
 
-	// Map lookup interfaces (return NULL if value not found)
+	// Map lookup interfaces (return InvalidIndex if value not found)
 	NodeIndex getValueNodeFor(const llvm::Value* val);
 	NodeIndex getValueNodeForConstant(const llvm::Constant* c);
 	NodeIndex getObjectNodeFor(const llvm::Value* val);
@@ -115,6 +115,12 @@ public:
 	const llvm::Value* getValueForNode(NodeIndex i)
 	{
 		return nodes.at(i).getValue();
+	}
+
+	// Value remover
+	void removeNodeForValue(const llvm::Value* val)
+	{
+		valueNodeMap.erase(val);
 	}
 
 	// Size getters
