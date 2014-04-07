@@ -60,8 +60,9 @@ void Andersen::collectConstraintsForGlobals(Module& M)
 	// Create a pointer and an object for each global variable
 	for (auto const& globalVal: M.globals())
 	{
-		nodeFactory.createValueNode(&globalVal);
-		nodeFactory.createObjectNode(&globalVal);
+		NodeIndex gVal = nodeFactory.createValueNode(&globalVal);
+		NodeIndex gObj = nodeFactory.createObjectNode(&globalVal);
+		constraints.emplace_back(AndersConstraint::ADDR_OF, gVal, gObj);
 	}
 
 	// Functions and function pointers are also considered global

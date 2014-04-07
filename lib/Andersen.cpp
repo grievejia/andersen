@@ -2,11 +2,13 @@
 
 #include "llvm/ADT/Statistic.h"
 #include "llvm/Support/raw_ostream.h"
+#include "llvm/Support/CommandLine.h"
 
 using namespace llvm;
 
-const unsigned Andersen::CallReturnPos = 1;
-const unsigned Andersen::CallFirstArgPos = 2;
+cl::opt<bool> DumpDebugInfo("dump-debug", cl::desc("Dump debug info into stderr"), cl::init(false), cl::Hidden);
+cl::opt<bool> DumpResultInfo("dump-result", cl::desc("Dump result info into stderr"), cl::init(false), cl::Hidden);
+cl::opt<bool> DumpConstraintInfo("dump-cons", cl::desc("Dump constraint info into stderr"), cl::init(false), cl::Hidden);
 
 void Andersen::getAnalysisUsage(AnalysisUsage &AU) const
 {
@@ -21,15 +23,29 @@ bool Andersen::runOnModule(Module &M)
 
 	collectConstraints(M);
 
-	//nodeFactory.dumpNodeInfo();
-	dumpConstraintsPlainVanilla();
+	if (DumpDebugInfo)
+		dumpConstraintsPlainVanilla();
 
 	optimizeConstraints();
 
+	if (DumpConstraintInfo)
+		dumpConstraints();
+
 	solveConstraints();
 
-	errs() << "\n";
-	dumpPtsGraphPlainVanilla();
+	if (DumpDebugInfo)
+	{
+		errs() << "\n";
+		dumpPtsGraphPlainVanilla();
+	}
+
+	if (DumpResultInfo)
+	{
+		nodeFactory.dumpNodeInfo();
+		errs() << "\n";
+		dumpPtsGraphPlainVanilla();	
+	}
+	
 
 	return false;
 }

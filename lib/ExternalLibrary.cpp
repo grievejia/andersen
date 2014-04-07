@@ -184,7 +184,7 @@ bool Andersen::addConstraintForExternalLibrary(ImmutableCallSite cs, const Funct
 
 		NodeIndex tempIndex = nodeFactory.createValueNode();
 		constraints.emplace_back(AndersConstraint::LOAD, tempIndex, arg1Index);
-		constraints.emplace_back(AndersConstraint::STORE, arg1Index, tempIndex);
+		constraints.emplace_back(AndersConstraint::STORE, arg0Index, tempIndex);
 
 		// Don't forget the return value
 		NodeIndex retIndex = nodeFactory.getValueNodeFor(cs.getInstruction());

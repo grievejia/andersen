@@ -147,7 +147,7 @@ NodeIndex AndersNodeFactory::getObjectNodeForConstant(const llvm::Constant* c)
 		{
 			// Pointer to any field within a struct is treated as a pointer to the first field
 			case Instruction::GetElementPtr:
-				getObjectNodeForConstant(ce->getOperand(0));
+				return getObjectNodeForConstant(ce->getOperand(0));
 			case Instruction::IntToPtr:
 			case Instruction::PtrToInt:
 				return getUniversalObjNode();

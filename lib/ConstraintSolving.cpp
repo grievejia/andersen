@@ -7,11 +7,15 @@
 #include "llvm/ADT/SmallSet.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/ADT/iterator_range.h"
+#include "llvm/Support/CommandLine.h"
 
 #include <queue>
 #include <map>
 
 using namespace llvm;
+
+cl::opt<bool> EnableHCD("enable-hcd", cl::desc("Enable the hybrid cycle detection algorithm"));
+cl::opt<bool> EnableLCD("enable-lcd", cl::desc("Enable the lazy cycle detection algorithm"));
 
 namespace {
 
@@ -495,7 +499,8 @@ void Andersen::solveConstraints()
 {
 	// We'll do offline HCD first
 	OfflineCycleDetector offlineInfo(constraints, nodeFactory);
-	offlineInfo.run();
+	if (EnableHCD)
+		offlineInfo.run();
 
 	// Now build the constraint graph
 	ConstraintGraph constraintGraph;
@@ -513,10 +518,11 @@ void Andersen::solveConstraints()
 	DenseSet<std::pair<NodeIndex, NodeIndex>> checkedEdges;
 
 	// Scan the node list, add it to work list if the node a representative and can contribute to the calculation right now.
-	for (unsigned i = 0, e = nodeFactory.getNumNodes(); i < e; ++i)
+	for (auto const& mapping: ptsGraph)
 	{
-		if (nodeFactory.getMergeTarget(i) == i && ptsGraph.count(i) && constraintGraph.getNodeWithIndex(i) != nullptr)
-			currWorkList->enqueue(i);
+		NodeIndex node = mapping.first;
+		if (nodeFactory.getMergeTarget(node) == node && constraintGraph.getNodeWithIndex(node) != nullptr)
+			currWorkList->enqueue(node);
 	}
 
 	while (!currWorkList->isEmpty())
@@ -524,7 +530,7 @@ void Andersen::solveConstraints()
 		// Iteration begins
 
 		// First we've got to check if there is any cycle candidates in the last iteration. If there is, detect and collapse cycle
-		if (!cycleCandidates.empty())
+		if (EnableLCD && !cycleCandidates.empty())
 		{
 			// Detect and collapse cycles online
 			OnlineCycleDetector cycleDetector(nodeFactory, constraintGraph, ptsGraph, cycleCandidates);
@@ -549,32 +555,35 @@ void Andersen::solveConstraints()
 				const AndersPtsSet& ptsSet = ptsItr->second;
 
 				// This is where we perform HCD: check if node has a collapse target, and if it does, merge them immediately
-				NodeIndex collapseTarget = offlineInfo.getCollapseTarget(node);
-				if (collapseTarget != AndersNodeFactory::InvalidIndex)
+				if (EnableHCD)
 				{
-					//errs() << "node = " << node << ", collapseTgt = " << collapseTarget << "\n";
-					NodeIndex ctRep = nodeFactory.getMergeTarget(collapseTarget);
-					// Here we have to pay special attention to whether the node points-to itself.
-					bool mergeSelf = false;
-					for (auto v: ptsSet)
+					NodeIndex collapseTarget = offlineInfo.getCollapseTarget(node);
+					if (collapseTarget != AndersNodeFactory::InvalidIndex)
 					{
-						NodeIndex vRep = nodeFactory.getMergeTarget(v);
-						if (vRep == node)
+						//errs() << "node = " << node << ", collapseTgt = " << collapseTarget << "\n";
+						NodeIndex ctRep = nodeFactory.getMergeTarget(collapseTarget);
+						// Here we have to pay special attention to whether the node points-to itself.
+						bool mergeSelf = false;
+						for (auto v: ptsSet)
 						{
-							mergeSelf = true;
-							continue;
+							NodeIndex vRep = nodeFactory.getMergeTarget(v);
+							if (vRep == node)
+							{
+								mergeSelf = true;
+								continue;
+							}
+							collapseNodes(ctRep, vRep, nodeFactory, ptsGraph, constraintGraph);
 						}
-						collapseNodes(ctRep, vRep, nodeFactory, ptsGraph, constraintGraph);
-					}
 
-					if (mergeSelf)
-					{
-						collapseNodes(ctRep, node, nodeFactory, ptsGraph, constraintGraph);
-						// If the node collapsing succeeds, we can't proceed here because node no longer exists. Push ctRep to the worklist and proceed
-						if (ctRep != node)
+						if (mergeSelf)
 						{
-							nextWorkList->enqueue(ctRep);
-							continue;
+							collapseNodes(ctRep, node, nodeFactory, ptsGraph, constraintGraph);
+							// If the node collapsing succeeds, we can't proceed here because node no longer exists. Push ctRep to the worklist and proceed
+							if (ctRep != node)
+							{
+								nextWorkList->enqueue(ctRep);
+								continue;
+							}
 						}
 					}
 				}
@@ -639,7 +648,7 @@ void Andersen::solveConstraints()
 					{
 						nextWorkList->enqueue(tgtNode);
 					}
-					else
+					else if (EnableLCD)
 					{
 						// This is where we do lazy cycle detection.
 						// If this is a cycle candidate (equal points-to sets and this particular edge has not been cycle-checked previously), add to the list to check for cycles on the next iteration

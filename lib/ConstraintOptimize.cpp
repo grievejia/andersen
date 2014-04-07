@@ -7,12 +7,16 @@
 #include "llvm/ADT/SparseBitVector.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Support/ToolOutputFile.h"
+#include "llvm/Support/CommandLine.h"
 
 #include <deque>
 #include <unordered_map>
 #include <set>
 
 using namespace llvm;
+
+cl::opt<bool> EnableHVN("enable-hvn", cl::desc("Enable the HVN constraint optimization"));
+cl::opt<bool> EnableHU("enable-hu", cl::desc("Enable the HU constraint optimization"));
 
 namespace {
 
@@ -567,9 +571,11 @@ void Andersen::optimizeConstraints()
 
 	// First, let's do HVN
 	// There is an additional assumption here that before HVN, we have not merged any two nodes. Might fix that in the future
-	HVNOptimizer hvn(constraints, nodeFactory);
-	hvn.run();
-	hvn.releaseMemory();
+	if (EnableHVN)
+	{
+		HVNOptimizer hvn(constraints, nodeFactory);
+		hvn.run();
+	}
 
 	//nodeFactory.dumpRepInfo();
 	//dumpConstraints();
@@ -578,8 +584,11 @@ void Andersen::optimizeConstraints()
 
 	// Next, do HU
 	// There is an additional assumption here that before HU, the predecessor graph will have no cycle. Might fix that in the future
-	HUOptimizer hu(constraints, nodeFactory);
-	hu.run();
+	if (EnableHU)
+	{
+		HUOptimizer hu(constraints, nodeFactory);
+		hu.run();
+	}
 
 	//nodeFactory.dumpRepInfo();
 	//dumpConstraints();

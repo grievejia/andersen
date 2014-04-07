@@ -61,12 +61,6 @@ class Andersen: public llvm::ModulePass
 private:
 	const llvm::DataLayout* dataLayout;
 
-	// Constants that will become useful
-	// Position of the function return node relative to the function node.
-	static const unsigned CallReturnPos;
-	// Position of the function call node relative to the function node.
-	static const unsigned CallFirstArgPos;
-
 	// A factory object that knows how to manage AndersNodes
 	AndersNodeFactory nodeFactory;
 
