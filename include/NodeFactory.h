@@ -116,7 +116,7 @@ public:
 	{
 		return nodes.at(i).getValue();
 	}
-	void getAllocSites(std::vector<const llvm::Value*>) const;
+	void getAllocSites(std::vector<const llvm::Value*>&) const;
 
 	// Value remover
 	void removeNodeForValue(const llvm::Value* val)

@@ -16,7 +16,7 @@ void Andersen::getAnalysisUsage(AnalysisUsage &AU) const
 	AU.setPreservesAll();
 }
 
-void Andersen::getAllAllocationSites(std::vector<const llvm::Value*> allocSites) const
+void Andersen::getAllAllocationSites(std::vector<const llvm::Value*>& allocSites) const
 {
 	nodeFactory.getAllocSites(allocSites);
 }

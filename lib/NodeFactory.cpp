@@ -209,7 +209,7 @@ NodeIndex AndersNodeFactory::getMergeTarget(NodeIndex n) const
 	return ret;
 }
 
-void AndersNodeFactory::getAllocSites(std::vector<const llvm::Value*> allocSites) const
+void AndersNodeFactory::getAllocSites(std::vector<const llvm::Value*>& allocSites) const
 {
 	allocSites.clear();
 	allocSites.reserve(objNodeMap.size());
