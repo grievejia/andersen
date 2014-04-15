@@ -278,9 +278,12 @@ void Andersen::collectConstraintsForInstruction(const Instruction* inst)
 			}
 			break;
 		}
-		// We should rely on a preliminary pass to translates extractvalue/insertvalue into GEPs
 		case Instruction::ExtractValue:
 		case Instruction::InsertValue:
+		{
+			if (!inst->getType()->isPointerTy())
+				break;
+		}
 		// We have no intention to support exception-handling in the near future
 		case Instruction::LandingPad:
 		case Instruction::Resume:
@@ -288,6 +291,7 @@ void Andersen::collectConstraintsForInstruction(const Instruction* inst)
 		case Instruction::AtomicRMW:
 		case Instruction::AtomicCmpXchg:
 		{
+			errs() << *inst << "\n";
 			assert(false && "not implemented yet");
 		}
 		default:

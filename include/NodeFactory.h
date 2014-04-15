@@ -82,12 +82,12 @@ public:
 	NodeIndex createVarargNode(const llvm::Function* f);
 
 	// Map lookup interfaces (return InvalidIndex if value not found)
-	NodeIndex getValueNodeFor(const llvm::Value* val);
-	NodeIndex getValueNodeForConstant(const llvm::Constant* c);
-	NodeIndex getObjectNodeFor(const llvm::Value* val);
-	NodeIndex getObjectNodeForConstant(const llvm::Constant* c);
-	NodeIndex getReturnNodeFor(const llvm::Function* f);
-	NodeIndex getVarargNodeFor(const llvm::Function* f);
+	NodeIndex getValueNodeFor(const llvm::Value* val) const;
+	NodeIndex getValueNodeForConstant(const llvm::Constant* c) const;
+	NodeIndex getObjectNodeFor(const llvm::Value* val) const;
+	NodeIndex getObjectNodeForConstant(const llvm::Constant* c) const;
+	NodeIndex getReturnNodeFor(const llvm::Function* f) const;
+	NodeIndex getVarargNodeFor(const llvm::Function* f) const;
 
 	// Node merge interfaces
 	void mergeNode(NodeIndex n0, NodeIndex n1);	// Merge n1 into n0
@@ -112,10 +112,11 @@ public:
 	NodeIndex getNullObjectNode() const { return NullObjectIndex; }
 
 	// Value getters
-	const llvm::Value* getValueForNode(NodeIndex i)
+	const llvm::Value* getValueForNode(NodeIndex i) const
 	{
 		return nodes.at(i).getValue();
 	}
+	void getAllocSites(std::vector<const llvm::Value*>) const;
 
 	// Value remover
 	void removeNodeForValue(const llvm::Value* val)

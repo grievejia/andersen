@@ -76,7 +76,7 @@ NodeIndex AndersNodeFactory::createVarargNode(const llvm::Function* f)
 	return nextIdx;
 }
 
-NodeIndex AndersNodeFactory::getValueNodeFor(const Value* val)
+NodeIndex AndersNodeFactory::getValueNodeFor(const Value* val) const
 {
 	if (const Constant* c = dyn_cast<Constant>(val))
 		if (!isa<GlobalValue>(c))
@@ -90,7 +90,7 @@ NodeIndex AndersNodeFactory::getValueNodeFor(const Value* val)
 		return itr->second;
 }
 
-NodeIndex AndersNodeFactory::getValueNodeForConstant(const llvm::Constant* c)
+NodeIndex AndersNodeFactory::getValueNodeForConstant(const llvm::Constant* c) const
 {
 	assert(isa<PointerType>(c->getType()) && "Not a constant pointer!");
 	
@@ -120,7 +120,7 @@ NodeIndex AndersNodeFactory::getValueNodeForConstant(const llvm::Constant* c)
 	return InvalidIndex;
 }
 
-NodeIndex AndersNodeFactory::getObjectNodeFor(const Value* val)
+NodeIndex AndersNodeFactory::getObjectNodeFor(const Value* val) const
 {
 	if (const Constant* c = dyn_cast<Constant>(val))
 		if (!isa<GlobalValue>(c))
@@ -133,7 +133,7 @@ NodeIndex AndersNodeFactory::getObjectNodeFor(const Value* val)
 		return itr->second;
 }
 
-NodeIndex AndersNodeFactory::getObjectNodeForConstant(const llvm::Constant* c)
+NodeIndex AndersNodeFactory::getObjectNodeForConstant(const llvm::Constant* c) const
 {
 	assert(isa<PointerType>(c->getType()) && "Not a constant pointer!");
 
@@ -163,7 +163,7 @@ NodeIndex AndersNodeFactory::getObjectNodeForConstant(const llvm::Constant* c)
 	return InvalidIndex;
 }
 
-NodeIndex AndersNodeFactory::getReturnNodeFor(const llvm::Function* f)
+NodeIndex AndersNodeFactory::getReturnNodeFor(const llvm::Function* f) const
 {
 	auto itr = returnMap.find(f);
 	if (itr == returnMap.end())
@@ -172,7 +172,7 @@ NodeIndex AndersNodeFactory::getReturnNodeFor(const llvm::Function* f)
 		return itr->second;
 }
 
-NodeIndex AndersNodeFactory::getVarargNodeFor(const llvm::Function* f)
+NodeIndex AndersNodeFactory::getVarargNodeFor(const llvm::Function* f) const
 {
 	auto itr = varargMap.find(f);
 	if (itr == varargMap.end())
@@ -207,6 +207,14 @@ NodeIndex AndersNodeFactory::getMergeTarget(NodeIndex n) const
 	while (ret != nodes[ret].mergeTarget)
 		ret = nodes[ret].mergeTarget;
 	return ret;
+}
+
+void AndersNodeFactory::getAllocSites(std::vector<const llvm::Value*> allocSites) const
+{
+	allocSites.clear();
+	allocSites.reserve(objNodeMap.size());
+	for (auto const& mapping: objNodeMap)
+		allocSites.push_back(mapping.first);
 }
 
 void AndersNodeFactory::dumpNode(NodeIndex idx) const
