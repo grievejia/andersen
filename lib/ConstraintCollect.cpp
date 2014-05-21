@@ -4,6 +4,7 @@
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/InstIterator.h"
+#include "llvm/IR/PatternMatch.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/Analysis/ValueTracking.h"
 #include "llvm/Support/raw_ostream.h"
@@ -246,9 +247,40 @@ void Andersen::collectConstraintsForInstruction(const Instruction* inst)
 		case Instruction::IntToPtr:
 		{
 			assert(inst->getType()->isPointerTy());
+			
+			// Get the node index for dst
 			NodeIndex dstIndex = nodeFactory.getValueNodeFor(inst);
 			assert(dstIndex != AndersNodeFactory::InvalidIndex && "Failed to find inttoptr dst node");
+
+			// We use pattern matching to look for a matching ptrtoint
+			Value* op = inst->getOperand(0);
+
+			// Pointer copy: Y = inttoptr (ptrtoint X)
+			Value* srcValue = nullptr;
+			if (PatternMatch::match(op, PatternMatch::m_PtrToInt(PatternMatch::m_Value(srcValue))))
+			{
+				NodeIndex srcIndex = nodeFactory.getValueNodeFor(srcValue);
+				assert(srcIndex != AndersNodeFactory::InvalidIndex && "Failed to find inttoptr src node");
+				constraints.emplace_back(AndersConstraint::COPY, dstIndex, srcIndex);
+				break;
+			}
+			
+			// Pointer arithmetic: Y = inttoptr (ptrtoint (X) + offset)
+			if (PatternMatch::match(op,
+				PatternMatch::m_Add(
+					PatternMatch::m_PtrToInt(
+						PatternMatch::m_Value(srcValue)),
+					PatternMatch::m_Value())))
+			{
+				NodeIndex srcIndex = nodeFactory.getValueNodeFor(srcValue);
+				assert(srcIndex != AndersNodeFactory::InvalidIndex && "Failed to find inttoptr src node");
+				constraints.emplace_back(AndersConstraint::COPY, dstIndex, srcIndex);
+				break;
+			}
+			
+			// Otherwise, we really don't know what dst points to
 			constraints.emplace_back(AndersConstraint::COPY, dstIndex, nodeFactory.getUniversalPtrNode());
+
 			break;
 		}
 		case Instruction::Select:
