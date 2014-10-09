@@ -10,13 +10,20 @@ class AndersPtsSet
 private:
 	llvm::SparseBitVector<> bitvec;
 public:
-	typedef llvm::SparseBitVector<>::iterator iterator;
+	using iterator = llvm::SparseBitVector<>::iterator;
 
 	// Return true if *this has idx as an element
 	// This function should be marked const, but we cannot do it because SparseBitVector::test() is not marked const. WHY???
 	bool has(unsigned idx)
 	{
 		return bitvec.test(idx);
+	}
+	bool has(unsigned idx) const
+	{
+		// Since llvm::SparseBitVector::test() does not have a const quantifier, we have to use this ugly workaround to implement has()
+		llvm::SparseBitVector<> idVec;
+		idVec.set(idx);
+		return bitvec.contains(idVec);
 	}
 
 	// Return true if the ptsset changes

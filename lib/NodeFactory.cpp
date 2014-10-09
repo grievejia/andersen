@@ -11,7 +11,7 @@ using namespace llvm;
 
 const unsigned AndersNodeFactory::InvalidIndex = std::numeric_limits<unsigned int>::max();
 
-AndersNodeFactory::AndersNodeFactory(): dataLayout(NULL)
+AndersNodeFactory::AndersNodeFactory(): dataLayout(nullptr)
 {
 	// Note that we can't use std::vector::emplace_back() here because AndersNode's constructors are private hence std::vector cannot see it
 
@@ -193,8 +193,14 @@ NodeIndex AndersNodeFactory::getMergeTarget(NodeIndex n)
 	NodeIndex ret = nodes[n].mergeTarget;
 	if (ret != n)
 	{
-		ret = getMergeTarget(ret);
-		nodes[n].mergeTarget = ret;
+		std::vector<NodeIndex> path(1, n);
+		while (ret != nodes[ret].mergeTarget)
+		{
+			path.push_back(ret);
+			ret = nodes[ret].mergeTarget;
+		}
+		for (auto idx: path)
+			nodes[idx].mergeTarget = ret;
 	}
 	assert(ret < nodes.size());
 	return ret;
@@ -238,7 +244,7 @@ void AndersNodeFactory::dumpNodeInfo() const
 		errs() << ", val = ";
 		const Value* val = node.getValue();
 		if (val == nullptr)
-			errs() << "NULL";
+			errs() << "nullptr";
 		else if (isa<Function>(val))
 			errs() << "  <func> " << val->getName();
 		else

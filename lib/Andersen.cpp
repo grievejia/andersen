@@ -34,7 +34,7 @@ bool Andersen::getPointsToSet(const llvm::Value* v, std::vector<const llvm::Valu
 	auto ptsItr = ptsGraph.find(ptrTgt);
 	if (ptsItr == ptsGraph.end())
 	{
-		// Can't find ptrTgt. The reason might be that ptrTgt is an undefined pointer. Dereferencing it is undefined behavior anyway, so we might just want to treat it as a NULL pointer
+		// Can't find ptrTgt. The reason might be that ptrTgt is an undefined pointer. Dereferencing it is undefined behavior anyway, so we might just want to treat it as a nullptr pointer
 		return true;
 	}
 	for (auto v: ptsItr->second)

@@ -24,7 +24,7 @@ private:
 	AndersNodeType type;
 	NodeIndex idx, mergeTarget;
 	const llvm::Value* value;
-	AndersNode(AndersNodeType t, unsigned i, const llvm::Value* v = NULL): type(t), idx(i), mergeTarget(i), value(v) {}
+	AndersNode(AndersNodeType t, unsigned i, const llvm::Value* v = nullptr): type(t), idx(i), mergeTarget(i), value(v) {}
 public:
 	NodeIndex getIndex() const { return idx; }
 	const llvm::Value* getValue() const { return value; }
@@ -34,7 +34,7 @@ public:
 
 // This is the factory class of AndersNode
 // It use a vectors to hold all Nodes in the program
-// Since vectors may invalidate all element pointers/iterators when resizing, it is impossible to return AndersNode* in public interfaces (they may get invalidated). Therefore, we use plain integers to represent nodes for public functions like createXXX and getXXX. This is ugly, but it is efficient.
+// Since vectors may invalidate all element pointers/iterators when resizing, it is impossible to return AndersNode* in public interfaces without using std::unique_ptr and heap allocations. Therefore, we use plain integers to represent nodes for public functions like createXXX and getXXX. This is ugly, but it is efficient.
 class AndersNodeFactory
 {
 public:
@@ -56,18 +56,14 @@ private:
 	// valueNodeMap - This map indicates the AndersNode* that a particular Value* corresponds to
 	llvm::DenseMap<const llvm::Value*, NodeIndex> valueNodeMap;
 	
-	/// ObjectNodes - This map contains entries for each memory object in the program: globals, alloca's and mallocs.
+	// ObjectNodes - This map contains entries for each memory object in the program: globals, alloca's and mallocs.
 	// We are able to represent them as llvm::Value* because we're modeling the heap with the simplest allocation-site approach
 	llvm::DenseMap<const llvm::Value*, NodeIndex> objNodeMap;
 
-	/// returnMap - This map contains an entry for each function in the
-	/// program that returns a ptr.
+	// returnMap - This map contains an entry for each function in the program that returns a ptr.
 	llvm::DenseMap<const llvm::Function*, NodeIndex> returnMap;
 
-	/// varargMap - This map contains the entry used to represent all pointers
-	/// passed through the varargs portion of a function call for a particular
-	/// function.  An entry is not present in this map for functions that do not
-	/// take variable arguments.
+	// varargMap - This map contains the entry used to represent all pointers passed through the varargs portion of a function call for a particular function.  An entry is not present in this map for functions that do not take variable arguments.
 	llvm::DenseMap<const llvm::Function*, NodeIndex> varargMap;
 
 public:
@@ -76,8 +72,8 @@ public:
 	void setDataLayout(const llvm::DataLayout* d) { dataLayout = d; }
 
 	// Factory methods
-	NodeIndex createValueNode(const llvm::Value* val = NULL);
-	NodeIndex createObjectNode(const llvm::Value* val = NULL);
+	NodeIndex createValueNode(const llvm::Value* val = nullptr);
+	NodeIndex createObjectNode(const llvm::Value* val = nullptr);
 	NodeIndex createReturnNode(const llvm::Function* f);
 	NodeIndex createVarargNode(const llvm::Function* f);
 

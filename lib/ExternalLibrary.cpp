@@ -111,7 +111,7 @@ bool Andersen::addConstraintForExternalLibrary(ImmutableCallSite cs, const Funct
 	if (lookupName(noopFuncs, f->getName().data()))
 		return true;
 
-	// Realloc-like library is a little different: if the first argument is NULL, then it behaves like retArg0Funcs; otherwise, it behaves like mallocFuncs
+	// Realloc-like library is a little different: if the first argument is nullptr, then it behaves like retArg0Funcs; otherwise, it behaves like mallocFuncs
 	bool isReallocLike = lookupName(reallocFuncs, f->getName().data());
 
 	// Library calls that might allocate memory.

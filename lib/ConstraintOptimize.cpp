@@ -8,6 +8,7 @@
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Support/ToolOutputFile.h"
 #include "llvm/Support/CommandLine.h"
+#include "llvm/Support/FileSystem.h"
 
 #include <deque>
 #include <unordered_map>
@@ -148,7 +149,7 @@ protected:
 	void writePredecessorGraphToFile() const
 	{
 		std::string errInfo;
-		tool_output_file outFile("dots/pred.dot", errInfo, sys::fs::F_None);
+		tool_output_file outFile("dots/pred.dot", errInfo, sys::fs::F_Text);
 		if (!errInfo.empty())
 		{
 			errs() << errInfo << '\n';

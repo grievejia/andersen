@@ -15,7 +15,7 @@ using namespace llvm;
 
 void Andersen::collectConstraints(Module& M)
 {
-	// First, the universal set points to itself.
+	// First, the universal ptr points to universal obj, and the universal obj points to itself
 	constraints.emplace_back(AndersConstraint::ADDR_OF,
 		nodeFactory.getUniversalPtrNode(), nodeFactory.getUniversalObjNode());
 	constraints.emplace_back(AndersConstraint::STORE,
@@ -39,10 +39,10 @@ void Andersen::collectConstraints(Module& M)
 		// Scan the function body
 		// A visitor pattern might help modularity, but it needs more boilerplate codes to set up, and it breaks down the main logic into pieces 
 
-		// First, create a value node for each instructino with pointer type. It is necessary to do the job here rather than on-the-fly because an instruction may refer to the value node definied before it (e.g. phi nodes)
+		// First, create a value node for each instruction with pointer type. It is necessary to do the job here rather than on-the-fly because an instruction may refer to the value node definied before it (e.g. phi nodes)
 		for (const_inst_iterator itr = inst_begin(f), ite = inst_end(f); itr != ite; ++itr)
 		{
-			const Instruction* inst = itr.getInstructionIterator();
+			auto inst = itr.getInstructionIterator();
 			if (inst->getType()->isPointerTy())
 				nodeFactory.createValueNode(inst);
 		}
@@ -50,7 +50,7 @@ void Andersen::collectConstraints(Module& M)
 		// Now, collect constraint for each relevant instruction
 		for (const_inst_iterator itr = inst_begin(f), ite = inst_end(f); itr != ite; ++itr)
 		{
-			const Instruction* inst = itr.getInstructionIterator();
+			auto inst = itr.getInstructionIterator();
 			collectConstraintsForInstruction(inst);
 		}
 	}
@@ -110,8 +110,7 @@ void Andersen::collectConstraintsForGlobals(Module& M)
 		}
 		else
 		{
-			// If it doesn't have an initializer (i.e. it's defined in another
-			// translation unit), it points to the universal set.
+			// If it doesn't have an initializer (i.e. it's defined in another translation unit), it points to the universal set.
 			constraints.emplace_back(AndersConstraint::COPY,
 				gObj, nodeFactory.getUniversalObjNode());
 		}

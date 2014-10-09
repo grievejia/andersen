@@ -8,11 +8,11 @@ This project is an implementation of Andersen's analysis in LLVM. The entire alg
 - Rewriting the constraints into a smaller set of constraints whose solution should be the same as the original set.
 - Solving the optimized constraints.
 
-For phase 1, we treats structs in LLVM-IR field-insensitively. This will yield worse result, but the analysis efficiency and correctness can be more easily guaranteed. We plan to move to a field-sensitive implementation in the future, but for now we want to do the quick dirty things first. Dynamic memory allocations are modelled by their allocation site.
+In phase 1, we treats structs in LLVM-IR field-insensitively. This will yield worse result, but the analysis efficiency and correctness can be more easily guaranteed. We plan to move to a field-sensitive implementation in the future, but for now we want to do the quick dirty things first. Dynamic memory allocations are modelled by their allocation site.
 
-For phase 2, two constraint optimization techniques called HVN and HU are used. The basic idea is to search for pointers that have equivalent points-to set and merge together their representations. Details can be found in Ben Hardekopf's SAS'07 paper.
+In phase 2, two constraint optimization techniques called HVN and HU are used. The basic idea is to search for pointers that have equivalent points-to set and merge together their representations. Details can be found in Ben Hardekopf's SAS'07 paper.
 
-For phase 3, two constraint solving techniques called HCD and LCD are used. The basic idea is to search for strongly-connected-components in the constraint graph on-the-fly. Details can be found in Ben Hardekopf's PLDI'07 paper ("The Ant and the Grasshopper").
+In phase 3, two constraint solving techniques called HCD and LCD are used. The basic idea is to search for strongly-connected-components in the constraint graph on-the-fly. Details can be found in Ben Hardekopf's PLDI'07 paper ("The Ant and the Grasshopper").
 
 Publications
 ------------
@@ -24,11 +24,11 @@ Publications
 Building the project
 -----------------
 
-To build Andersen's analysis, you need to have a C++ compiler (e.g., g++ or clang++)
-installed. It should compile without trouble on most recent Linux or MacXOS
+To build Andersen's analysis, you need to have a C++ compiler with C++11 support
+installed (e.g. g++ 4.8 or later, clang++ 3.4 or later). It should compile without trouble on most recent Linux or MacXOS
 machines.
 
-1. Download the source code of LLVM 3.5 from SVN. Currently I am working on trunk 203470. Older version of LLVM are guaranteed not to work because they lack C++11 support.
+1. Download the source code of LLVM 3.5. Older version of LLVM are guaranteed not to work because they lack C++11 support.
 
 2. Build LLVM from source code.
 

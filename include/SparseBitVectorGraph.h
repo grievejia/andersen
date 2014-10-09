@@ -8,6 +8,7 @@
 #include "llvm/ADT/DenseMap.h"
 
 #include <algorithm>
+#include <unordered_map>
 
 // The node of a graph class where successor edges are represented by sparse bit vectors
 class SparseBitVectorGraphNode
@@ -20,12 +21,14 @@ private:
 
 	SparseBitVectorGraphNode(NodeIndex i): idx(i) {}
 public:
-	typedef llvm::SparseBitVector<>::iterator iterator;
+	using iterator = llvm::SparseBitVector<>::iterator;
 
 	NodeIndex getNodeIndex() const { return idx; }
 
 	iterator begin() const { return succs.begin(); }
 	iterator end() const { return succs.end(); }
+
+	unsigned succ_getSize() const { return succs.count(); }
 
 	friend class SparseBitVectorGraph;
 };
@@ -35,22 +38,31 @@ class SparseBitVectorGraph
 {
 private:
 	// Here we cannot use DenseMap because we need iterator stability: we might want to call getOrInsertNode() when another node is being iterated
-	typedef std::map<NodeIndex, SparseBitVectorGraphNode> NodeMapTy;
+	using NodeMapTy = std::unordered_map<NodeIndex, SparseBitVectorGraphNode>;
 	NodeMapTy graph;
 public:
-	typedef NodeMapTy::iterator iterator;
-	typedef NodeMapTy::const_iterator const_iterator;
-
+	using iterator = NodeMapTy::iterator;
+	using const_iterator = NodeMapTy::const_iterator;
+private:
+	iterator getOrInsertNodeMap(NodeIndex idx)
+	{
+		auto itr = graph.find(idx);
+		if (itr == graph.end())
+			itr = graph.insert(std::make_pair(idx, SparseBitVectorGraphNode(idx))).first;
+		return itr;
+	}
+public:
 	SparseBitVectorGraph() {}
+
+	SparseBitVectorGraphNode* getOrInsertNode(NodeIndex idx)
+	{
+		auto itr = getOrInsertNodeMap(idx);
+		return &(itr->second);
+	}
 
 	void insertEdge(NodeIndex src, NodeIndex dst)
 	{
-		auto itr = graph.find(src);
-		if (itr == graph.end())
-		{
-			SparseBitVectorGraphNode srcNode(src);
-			itr = graph.insert(std::make_pair(src, std::move(srcNode))).first;
-		}
+		auto itr = getOrInsertNodeMap(src);
 		(itr->second).insertEdge(dst);
 	}
 
@@ -61,24 +73,8 @@ public:
 		if (dstItr == graph.end())
 			return;
 
-		auto srcItr = graph.find(src);
-		if (srcItr == graph.end())
-		{
-			SparseBitVectorGraphNode srcNode(src);
-			srcItr = graph.insert(std::make_pair(src, std::move(srcNode))).first;
-		}
+		auto srcItr = getOrInsertNodeMap(src);
 		(srcItr->second).succs |= (dstItr->second).succs;
-	}
-
-	SparseBitVectorGraphNode* getOrInsertNode(NodeIndex idx)
-	{
-		auto itr = graph.find(idx);
-		if (itr == graph.end())
-		{
-			SparseBitVectorGraphNode newNode(idx);
-			itr = graph.insert(std::make_pair(idx, newNode)).first;
-		}
-		return &(itr->second);
 	}
 
 	SparseBitVectorGraphNode* getNodeWithIndex(NodeIndex idx)
@@ -89,6 +85,8 @@ public:
 		else
 			return &(itr->second);
 	}
+
+	unsigned getSize() const { return graph.size(); }
 
 	void releaseMemory()
 	{
