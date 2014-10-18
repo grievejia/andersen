@@ -20,8 +20,7 @@ AliasAnalysis::AliasResult AndersenAA::andersenAlias(const llvm::Value* v1, cons
 	auto itr1 = (anders->ptsGraph).find(n1), itr2 = (anders->ptsGraph).find(n2);
 	if (itr1 == (anders->ptsGraph).end() || itr2 == (anders->ptsGraph).end())
 		// We knows nothing about at least one of (v1, v2)
-		// My claim is that at least one of them must be non-pointer, hence we could return NoAlias here
-		return AliasAnalysis::NoAlias;
+		return AliasAnalysis::MayAlias;
 
 	AndersPtsSet& s1 = itr1->second, s2 = itr2->second;
 	bool isNull1 = isSetContainingOnly(s1, (anders->nodeFactory).getNullObjectNode());
