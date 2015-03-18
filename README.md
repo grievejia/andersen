@@ -27,7 +27,7 @@ Building the project
 -----------------
 
 To build Andersen's analysis, you need to have a C++ compiler with C++14 support
-installed (e.g. g++ 4.9 or later, clang++ 3.4 or later). It should compile without trouble on most recent Linux or MacXOS
+installed (e.g. g++ 4.9 or later, clang++ 3.4 or later) as well as cmake 2.8.8 or later. It should compile without trouble on most recent Linux or MacXOS
 machines.
 
 1. Download the source code of LLVM 3.6. Older version of LLVM are guaranteed not to work because of API changes.
