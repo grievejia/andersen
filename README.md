@@ -18,7 +18,9 @@ Publications
 ------------
 
 [Program Analysis and Specialization for the C Programming Language](http://www.cs.cornell.edu/courses/cs711/2005fa/papers/andersen-thesis94.pdf). Ph.D. thesis
+
 [Exploiting Pointer and Location Equivalence to Optimize Pointer Analysis](http://www.cs.ucsb.edu/~benh/research/papers/hardekopf07exploiting.pdf). International Static Analysis Symposium (SAS), 2007
+
 [The Ant and the Grasshopper: Fast and Accurate Pointer Analysis for Millions of Lines of Code](http://www.cs.ucsb.edu/~benh/research/papers/hardekopf07ant.pdf). ACM Conference on Programming Language Design and Implementation (PLDI), 2007
 
 Building the project
