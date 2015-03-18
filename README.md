@@ -24,23 +24,23 @@ Publications
 Building the project
 -----------------
 
-To build Andersen's analysis, you need to have a C++ compiler with C++11 support
-installed (e.g. g++ 4.8 or later, clang++ 3.4 or later). It should compile without trouble on most recent Linux or MacXOS
+To build Andersen's analysis, you need to have a C++ compiler with C++14 support
+installed (e.g. g++ 4.9 or later, clang++ 3.4 or later). It should compile without trouble on most recent Linux or MacXOS
 machines.
 
-1. Download the source code of LLVM 3.5. Older version of LLVM are guaranteed not to work because they lack C++11 support.
+1. Download the source code of LLVM 3.6. Older version of LLVM are guaranteed not to work because of API changes.
 
-2. Build LLVM from source code.
+2. Build and install LLVM from source code.
 
 3. Checkout this project
 
 4. Build this project
 ```bash
 cd <directory-you-want-to-build-this-project>
-<project-source-code-dir>/configure --with-llvmsrc=<LLVM source code dir> --with-llvmobj=<LLVM build dir> --enable-cxx11
+cmake <project-source-code-dir> -DCMAKE_BUILD_TYPE=<specify build type (Debug or Release)>
 make
 ```
-Note that in the configuration step the build mode (Release/Debug with or without Asserts) of this project must match the build mode of llvmobj
+Note that in the configuration step the build mode (Release/Debug with or without Asserts) of this project must match the build mode of your LLVM library.
 
 Using Andersen's analysis
 ----------------
