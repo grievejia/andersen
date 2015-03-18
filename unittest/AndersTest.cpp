@@ -128,16 +128,14 @@ private:
 protected:
 	Module* ParseAssembly(const char *Assembly)
 	{
-		M.reset(new Module("Module", getGlobalContext()));
-
 		SMDiagnostic Error;
-		bool Parsed = ParseAssemblyString(Assembly, M.get(), Error, M->getContext()) == M.get();
+		M = parseAssemblyString(Assembly, Error, getGlobalContext());
 
 		std::string errMsg;
 		raw_string_ostream os(errMsg);
 		Error.print("", os);
 
-		if (!Parsed) {
+		if (!M) {
 		  // A failure here means that the test itself is buggy.
 		  report_fatal_error(os.str().c_str());
 		}

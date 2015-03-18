@@ -24,9 +24,9 @@ public:
 	//ModRefResult getModRefInfo (llvm::ImmutableCallSite cs, const Location &loc);
 
 	AndersenAA(): ModulePass(ID), anders(nullptr), dataLayout(nullptr) {}
-	bool runOnModule(llvm::Module &M);
-	void getAnalysisUsage(llvm::AnalysisUsage &AU) const;
-	void* getAdjustedAnalysisPointer(llvm::AnalysisID PI);
+	bool runOnModule(llvm::Module &M) override;
+	void getAnalysisUsage(llvm::AnalysisUsage &AU) const override;
+	void* getAdjustedAnalysisPointer(llvm::AnalysisID PI) override;
 };
 
 #endif

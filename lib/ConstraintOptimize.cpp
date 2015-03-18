@@ -148,11 +148,11 @@ protected:
 
 	void writePredecessorGraphToFile() const
 	{
-		std::string errInfo;
+		std::error_code errInfo;
 		tool_output_file outFile("dots/pred.dot", errInfo, sys::fs::F_Text);
-		if (!errInfo.empty())
+		if (errInfo)
 		{
-			errs() << errInfo << '\n';
+			errs() << errInfo.message() << '\n';
 			return;
 		}
 
