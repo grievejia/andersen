@@ -13,7 +13,7 @@ using namespace llvm;
 
 // CollectConstraints - This stage scans the program, adding a constraint to the Constraints list for each instruction in the program that induces a constraint, and setting up the initial points-to graph.
 
-void Andersen::collectConstraints(Module& M)
+void Andersen::collectConstraints(const Module& M)
 {
 	// First, the universal ptr points to universal obj, and the universal obj points to itself
 	constraints.emplace_back(AndersConstraint::ADDR_OF,
@@ -42,7 +42,7 @@ void Andersen::collectConstraints(Module& M)
 		// First, create a value node for each instruction with pointer type. It is necessary to do the job here rather than on-the-fly because an instruction may refer to the value node definied before it (e.g. phi nodes)
 		for (const_inst_iterator itr = inst_begin(f), ite = inst_end(f); itr != ite; ++itr)
 		{
-			auto inst = itr.getInstructionIterator();
+			auto inst = &*itr.getInstructionIterator();
 			if (inst->getType()->isPointerTy())
 				nodeFactory.createValueNode(inst);
 		}
@@ -50,13 +50,13 @@ void Andersen::collectConstraints(Module& M)
 		// Now, collect constraint for each relevant instruction
 		for (const_inst_iterator itr = inst_begin(f), ite = inst_end(f); itr != ite; ++itr)
 		{
-			auto inst = itr.getInstructionIterator();
+			auto inst = &*itr.getInstructionIterator();
 			collectConstraintsForInstruction(inst);
 		}
 	}
 }
 
-void Andersen::collectConstraintsForGlobals(Module& M)
+void Andersen::collectConstraintsForGlobals(const Module& M)
 {
 	// Create a pointer and an object for each global variable
 	for (auto const& globalVal: M.globals())
@@ -94,7 +94,7 @@ void Andersen::collectConstraintsForGlobals(Module& M)
 		for (Function::const_arg_iterator itr = f.arg_begin(), ite = f.arg_end(); itr != ite; ++itr)
 		{
 			if (isa<PointerType>(itr->getType()))
-				nodeFactory.createValueNode(itr);
+				nodeFactory.createValueNode(&*itr);
 		}
 	}
 
@@ -323,12 +323,15 @@ void Andersen::collectConstraintsForInstruction(const Instruction* inst)
 		case Instruction::AtomicCmpXchg:
 		{
 			errs() << *inst << "\n";
-			assert(false && "not implemented yet");
+			llvm_unreachable("not implemented yet");
 		}
 		default:
 		{
-			errs() << *inst << "\n";
-			assert(!inst->getType()->isPointerTy() && "pointer-related inst not handled!");
+			if (inst->getType()->isPointerTy())
+			{
+				errs() << *inst << "\n";
+				llvm_unreachable("pointer-related inst not handled!");
+			}
 			break;
 		}
 	}
@@ -414,9 +417,14 @@ void Andersen::addConstraintForCall(ImmutableCallSite cs)
 					// Pollute everything
 					for (ImmutableCallSite::arg_iterator itr = cs.arg_begin(), ite = cs.arg_end(); itr != ite; ++itr)
 					{
-						NodeIndex argIndex = nodeFactory.getValueNodeFor(*itr);
-						assert(argIndex != AndersNodeFactory::InvalidIndex && "Failed to find arg node!");
-						constraints.emplace_back(AndersConstraint::COPY, argIndex, nodeFactory.getUniversalPtrNode());
+						Value* argVal = *itr;
+
+						if (argVal->getType()->isPointerTy())
+						{
+							NodeIndex argIndex = nodeFactory.getValueNodeFor(argVal);
+							assert(argIndex != AndersNodeFactory::InvalidIndex && "Failed to find arg node!");
+							constraints.emplace_back(AndersConstraint::COPY, argIndex, nodeFactory.getUniversalPtrNode());
+						}
 					}
 				}
 			}
@@ -432,7 +440,7 @@ void Andersen::addArgumentConstraintForCall(ImmutableCallSite cs, const Function
 	ImmutableCallSite::arg_iterator aItr = cs.arg_begin();
 	while (fItr != f->arg_end() && aItr != cs.arg_end())
 	{
-		const Argument* formal = fItr;
+		const Argument* formal = &*fItr;
 		const Value* actual = *aItr;
 
 		if (formal->getType()->isPointerTy())

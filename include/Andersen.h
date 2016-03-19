@@ -49,18 +49,15 @@
 #include "NodeFactory.h"
 #include "PtsSet.h"
 
-#include "llvm/Pass.h"
 #include "llvm/IR/DataLayout.h"
 #include "llvm/IR/CallSite.h"
 #include "llvm/ADT/DenseMap.h"
 
 #include <vector>
 
-class Andersen: public llvm::ModulePass
+class Andersen
 {
 private:
-	const llvm::DataLayout* dataLayout;
-
 	// A factory object that knows how to manage AndersNodes
 	AndersNodeFactory nodeFactory;
 
@@ -71,13 +68,12 @@ private:
 	std::map<NodeIndex, AndersPtsSet> ptsGraph;
 
 	// Three main phases
-	void identifyObjects(llvm::Module&);
-	void collectConstraints(llvm::Module&);
+	void collectConstraints(const llvm::Module&);
 	void optimizeConstraints();
 	void solveConstraints();
 
 	// Helper functions for constraint collection
-	void collectConstraintsForGlobals(llvm::Module&);
+	void collectConstraintsForGlobals(const llvm::Module&);
 	void collectConstraintsForInstruction(const llvm::Instruction*);
 	void addGlobalInitializerConstraints(NodeIndex, const llvm::Constant*);
 	void addConstraintForCall(llvm::ImmutableCallSite cs);
@@ -96,10 +92,8 @@ private:
 public:
 	static char ID;
 
-	Andersen(): llvm::ModulePass(ID) {}
-	bool runOnModule(llvm::Module& M);
-	void getAnalysisUsage(llvm::AnalysisUsage &AU) const;
-	void releaseMemory();
+	Andersen(const llvm::Module&);
+	bool runOnModule(const llvm::Module& M);
 
 	// Given a llvm pointer v,
 	// - Return false if the analysis doesn't know where v points to. In other words, the client must conservatively assume v can points to everything.
@@ -108,7 +102,7 @@ public:
 	// Put all allocation sites (i.e. all memory objects identified by the analysis) into the first arugment
 	void getAllAllocationSites(std::vector<const llvm::Value*>& allocSites) const;
 
-	friend class AndersenAA;
+	friend class AndersenAAResult;
 };
 
 #endif

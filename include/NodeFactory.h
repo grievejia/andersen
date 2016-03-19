@@ -41,8 +41,6 @@ public:
 	// The largest unsigned int is reserved for invalid index
 	static const unsigned InvalidIndex;
 private:
-	// The datalayout info
-	const llvm::DataLayout* dataLayout;
 
 	// The set of nodes 
 	std::vector<AndersNode> nodes;
@@ -68,8 +66,6 @@ private:
 
 public:
 	AndersNodeFactory();
-
-	void setDataLayout(const llvm::DataLayout* d) { dataLayout = d; }
 
 	// Factory methods
 	NodeIndex createValueNode(const llvm::Value* val = nullptr);

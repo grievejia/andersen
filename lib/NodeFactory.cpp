@@ -11,7 +11,7 @@ using namespace llvm;
 
 const unsigned AndersNodeFactory::InvalidIndex = std::numeric_limits<unsigned int>::max();
 
-AndersNodeFactory::AndersNodeFactory(): dataLayout(nullptr)
+AndersNodeFactory::AndersNodeFactory()
 {
 	// Note that we can't use std::vector::emplace_back() here because AndersNode's constructors are private hence std::vector cannot see it
 

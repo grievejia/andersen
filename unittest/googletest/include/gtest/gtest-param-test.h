@@ -190,6 +190,7 @@ TEST_P(DerivedTest, DoesBlah) {
 // inside #if GTEST_HAS_PARAM_TEST.
 #include "gtest/internal/gtest-internal.h"
 #include "gtest/internal/gtest-param-util.h"
+#include "gtest/internal/gtest-param-util-generated.h"
 
 #if GTEST_HAS_PARAM_TEST
 
@@ -323,12 +324,6 @@ internal::ParamGenerator<typename Container::value_type> ValuesIn(
     const Container& container) {
   return ValuesIn(container.begin(), container.end());
 }
-
-} // namespace testing
-
-#include <gtest/internal/gtest-param-util-generated.h>
-
-namespace testing {
 
 // Values() allows generating tests from explicitly specified list of
 // parameters.
@@ -1262,7 +1257,7 @@ inline internal::ParamGenerator<bool> Bool() {
 // Boolean flags:
 //
 // class FlagDependentTest
-//     : public testing::TestWithParam<tuple(bool, bool)> > {
+//     : public testing::TestWithParam<tuple<bool, bool> > {
 //   virtual void SetUp() {
 //     // Assigns external_flag_1 and external_flag_2 values from the tuple.
 //     tie(external_flag_1, external_flag_2) = GetParam();

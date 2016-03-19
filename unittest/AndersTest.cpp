@@ -160,10 +160,10 @@ TEST_F(AndersPassTest, NodeFactoryTest)
 	auto f = module->begin();
 	auto bb = f->begin();
 	auto itr = bb->begin();
-	auto x = itr;
-	auto y = ++itr;
-	auto z = ++itr;
-	auto w = ++itr;
+	auto x = &*itr;
+	auto y = &*++itr;
+	auto z = &*++itr;
+	auto w = &*++itr;
 
 	AndersNodeFactory factory;
 	auto vx = factory.createValueNode(x);

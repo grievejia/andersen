@@ -1,3 +1,5 @@
+add_subdirectory (googletest)
+
 include_directories(
   ${andersen_SOURCE_DIR}/unittest/googletest/include
   ${andersen_SOURCE_DIR}/include)
