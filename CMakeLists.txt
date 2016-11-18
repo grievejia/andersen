@@ -19,11 +19,15 @@ else()
 	message(STATUS "The compiler ${CMAKE_CXX_COMPILER} has no C++14 support. Please use a different C++ compiler.")
 endif()
 
+option(BUILD_TESTS "build all unit tests" ON)
+
 include_directories(${LLVM_INCLUDE_DIRS})
 add_definitions(${LLVM_DEFINITIONS})
 
 add_subdirectory (lib)
-add_subdirectory (unittest)
+if (BUILD_TESTS)
+	add_subdirectory (unittest)
+endif()
 
 enable_testing ()
 add_test (AndersTest ${PROJECT_BINARY_DIR}/unittest/AndersTest)

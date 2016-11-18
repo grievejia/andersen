@@ -3,39 +3,39 @@
 
 #include "Andersen.h"
 
-#include "llvm/Pass.h"
 #include "llvm/Analysis/AliasAnalysis.h"
-#include "llvm/Analysis/TargetLibraryInfo.h"
+#include "llvm/Pass.h"
 
-class AndersenAAResult: public llvm::AAResultBase<AndersenAAResult>
-{
+class AndersenAAResult : public llvm::AAResultBase<AndersenAAResult> {
 private:
-	friend llvm::AAResultBase<AndersenAAResult>;
+    friend llvm::AAResultBase<AndersenAAResult>;
 
-	Andersen anders;
-	llvm::AliasResult andersenAlias(const llvm::Value*, const llvm::Value*);
+    Andersen anders;
+    llvm::AliasResult andersenAlias(const llvm::Value*, const llvm::Value*);
+
 public:
-	AndersenAAResult(const llvm::Module&, llvm::TargetLibraryInfo&);
+    AndersenAAResult(const llvm::Module&);
 
-	llvm::AliasResult alias(const llvm::MemoryLocation&, const llvm::MemoryLocation&);
-	bool pointsToConstantMemory(const llvm::MemoryLocation&, bool);
+    llvm::AliasResult alias(const llvm::MemoryLocation&,
+                            const llvm::MemoryLocation&);
+    bool pointsToConstantMemory(const llvm::MemoryLocation&, bool);
 };
 
-class AndersenAAWrapperPass: public llvm::ModulePass
-{
+class AndersenAAWrapperPass : public llvm::ModulePass {
 private:
-	std::unique_ptr<AndersenAAResult> result;
+    std::unique_ptr<AndersenAAResult> result;
+
 public:
-	static char ID;
+    static char ID;
 
-	AndersenAAWrapperPass();
+    AndersenAAWrapperPass();
 
-	AndersenAAResult& getResult() { return *result; }
-	const AndersenAAResult& getResult() const { return *result; }
+    AndersenAAResult& getResult() { return *result; }
+    const AndersenAAResult& getResult() const { return *result; }
 
-	bool runOnModule(llvm::Module&) override;
-	//bool doFinalization(llvm::Module&) override;
-	void getAnalysisUsage(llvm::AnalysisUsage &AU) const override;
+    bool runOnModule(llvm::Module&) override;
+    // bool doFinalization(llvm::Module&) override;
+    void getAnalysisUsage(llvm::AnalysisUsage& AU) const override;
 };
 
 #endif

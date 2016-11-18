@@ -12,3 +12,4 @@ set (AndersenSourceCodes
 add_library (AndersenObj OBJECT ${AndersenSourceCodes})
 add_library (Andersen SHARED $<TARGET_OBJECTS:AndersenObj>)
 add_library (AndersenStatic STATIC $<TARGET_OBJECTS:AndersenObj>)
+target_link_libraries (AndersenStatic LLVMCore LLVMSupport)

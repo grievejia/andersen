@@ -30,33 +30,38 @@ To build Andersen's analysis, you need to have a C++ compiler with C++14 support
 installed (e.g. g++ 4.9 or later, clang++ 3.4 or later) as well as cmake 2.8.8 or later. It should compile without trouble on most recent Linux or MacXOS
 machines.
 
-1. Download the source code of LLVM 3.6. Older version of LLVM are guaranteed not to work because of API changes.
+1. Making sure that LLVM 3.9 is installed somewhere on your system. Older version of LLVM are guaranteed not to work because of API changes.
 
-2. Build and install LLVM from source code.
+2. Checkout this project
 
-3. Checkout this project
-
-4. Build this project
+3. Build this project
 ```bash
 cd <directory-you-want-to-build-this-project>
-cmake <project-source-code-dir> -DCMAKE_BUILD_TYPE=<specify build type (Debug or Release)>
+cmake <project-source-code-dir> -DCMAKE_BUILD_TYPE=<specify build type (Debug or Release)> -DBUILD_TESTS=<specify whether you want to build test files (ON or OFF)>
 make
 ```
-Note that in the configuration step the build mode (Release/Debug with or without Asserts) of this project must match the build mode of your LLVM library.
+Note that in the configuration step you might want to consider setting the build mode (Release/Debug with or without Asserts) to match the build mode of your LLVM library.
 
 Using Andersen's analysis
 ----------------
 
 The analysis is implemented as an LLVM pass. By default it does not dump anything into the console, hence the only way you can extract information from it is to write another pass that take the AndersenAA pass as a prerequisite and make alias queries using AndersenAA's public interfaces. AndersenAA conforms to the standard LLVM AliasAnalysis pass, so it shouldn't be too difficult if you know how to use other build-in alias analysis in LLVM (like basicaa).
 
-If you want points-to information rather than alias information, things become more tricky because in LLVM there is really no way to explicitly represent memory objects. The Andersen pass does have all the points-to information available, but I still have to write more public interfaces to expose them to the outside world.
+If you want points-to information rather than alias information, things become trickier. The Andersen pass does have all the points-to information available: check out `Andersen::getPointsToSet()`. Note that memory objects, in our case, are represented by their corresponding allocation site. 
 
 Limitations
 ----------------
 
 - The analysis does not support the following LLVM instructions: extractvalue, insertvalue, landingpad, resume, atomicrmw, atomiccmpxchg. In other words, exception handling and atomic operations are not considered in my project.
 
-- Field-insensitivity
+- Field-insensitivity. Adding support for field sensitivity will drastically increase the complexity of the algorithm. 
 
 - External library calls are not completely modelled. Calls to common library functions, such as malloc(), printf(), strcmp(), etc. are properly handled, yet other uncommonly used functions in libc are not. The analysis will dump the name of all external functions not recognized by it to the command line, and if you need the analysis to model them, please look at ExternalLibrary.cpp, or contact me.
+
+Related projects
+----------------
+
+Check out my [tpa](https://github.com/grievejia/tpa) repo for a full-blown flow-sensitive, context-sensitive, field-sensitive pointer analysis for LLVM. It hasn't been updated for a while and is woefully undocumented, but I hope it could give up some ideas of how to write such a thing. 
+
+If you only want a more precise alias analysis for your compiler pipeline, I'd recommend using the new [CFLAliasAnalysis](https://github.com/grievejia/GSoC2016) I contributed to in GSoC 2016. The Andersen variant is highly experimental, but it is in-tree and is much less of a hassle to use. 
 
