@@ -52,7 +52,7 @@ If you want points-to information rather than alias information, things become t
 Limitations
 ----------------
 
-- The analysis does not support the following LLVM instructions: extractvalue, insertvalue, landingpad, resume, atomicrmw, atomiccmpxchg. In other words, exception handling and atomic operations are not considered in my project.
+- The analysis does not support the following LLVM instructions: extractvalue, insertvalue, landingpad, resume, atomicrmw, atomiccmpxchg. In other words, exception handling and atomic operations are not considered in my project. (The atomic instruction restriction is easy to get around, though: LLVM has a loweratomic pass that lowers all atmoic instructions.)
 
 - Field-insensitivity. Adding support for field sensitivity will drastically increase the complexity of the algorithm. 
 
