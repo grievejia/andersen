@@ -368,7 +368,7 @@ public:
 
   void run() override {
     // Now run Tarjan's SCC algorithm to find cycles, condense predGraph, and
-    // explore possible equivalance relations
+    // explore possible equivalence relations
     runOnGraph(&predGraph);
 
     // For all nodes on the same cycle: assign their representative's pe label
