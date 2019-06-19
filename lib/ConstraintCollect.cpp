@@ -34,7 +34,7 @@ void Andersen::collectConstraints(const Module &M) {
   // global object as pointing to the memory for the global: &G = <G memory>
   collectConstraintsForGlobals(M);
 
-  // Here is a notable points before we proceed:
+  // Here is a notable point before we proceed:
   // For functions with non-local linkage type, theoretically we should not
   // trust anything that get passed to it or get returned by it. However,
   // precision will be seriously hurt if we do that because if we do not run a
