@@ -52,7 +52,7 @@ void Andersen::collectConstraints(const Module &M) {
 
     // First, create a value node for each instruction with pointer type. It is
     // necessary to do the job here rather than on-the-fly because an
-    // instruction may refer to the value node definied before it (e.g. phi
+    // instruction may refer to the value node defined before it (e.g. phi
     // nodes)
     for (const_inst_iterator itr = inst_begin(f), ite = inst_end(f); itr != ite;
          ++itr) {
